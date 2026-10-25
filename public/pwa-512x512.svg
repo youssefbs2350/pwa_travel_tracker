@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="planeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#grad)" />
+  <circle cx="256" cy="256" r="180" stroke="#0284c7" stroke-width="8" stroke-dasharray="16 12" fill="none" opacity="0.6"/>
+  <!-- Compass star & pin -->
+  <path d="M256 120 C190 120 140 170 140 236 C140 320 256 420 256 420 C256 420 372 320 372 236 C372 170 322 120 256 120 Z" fill="#0369a1" opacity="0.3"/>
+  <circle cx="256" cy="236" r="50" fill="#0ea5e9"/>
+  <!-- Airplane icon in center -->
+  <path d="M256 180 L275 225 L340 235 L290 265 L305 315 L256 285 L207 315 L222 265 L172 235 L237 225 Z" fill="#f8fafc"/>
+  <circle cx="256" cy="236" r="14" fill="#f59e0b"/>
+</svg>
