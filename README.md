@@ -33,7 +33,7 @@
 ---
 
 ### 📸 Souvenirs de Voyage (Journal & Galerie)
-- Attribution transparente : chaque souvenir affiche clairement le nom et le rôle de son auteur (`👤 Ajouté par : [Nom] ([Rôle])`), le voyage associé et l'emplacement exact.
+- Attribution transparente : chaque souvenir affiche clairement le prénom et le rôle de son auteur (`👤 Ajouté par : [Prénom] ([Rôle])`), le voyage associé et l'emplacement exact.
 - Prise en charge de l'import direct de photos locales depuis votre appareil ou via URL.
 - Mode Journal chronologique et Galerie avec visionneuse plein écran.
 
@@ -99,3 +99,16 @@ L'application démarre simultanément :
 - `npm run dev` : Lance le backend Express et le frontend Vite en simultané.
 - `npm run build` : Compile le projet TypeScript et génère les assets de production dans `dist/`.
 - `npm run preview` : Prévisualise le build de production localement.
+
+---
+
+## 👥 Équipe du Projet
+
+- **Chaima** — Authentification & Gestion des profils
+- **Ameni** — Voyages & Itinéraires
+- **Hedi** — Destinations, Lieux & Cartographie
+- **Youssef** — Planning & Activités
+- **Nour** — Budget & Dépenses
+- **Nourhene** — Souvenirs & Galerie
+- **Amine** — Réclamations & Service voyageur
+

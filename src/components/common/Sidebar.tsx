@@ -8,7 +8,6 @@ import {
   Sparkles, 
   AlertCircle, 
   Users, 
-  Code2,
   Shield,
   UserCheck
 } from 'lucide-react';
@@ -32,7 +31,6 @@ export const navigationTabs: TabItem[] = [
   { id: 'complaints', label: 'Réclamations', icon: AlertCircle },
   { id: 'profile', label: 'Mon Profil', icon: UserCheck },
   { id: 'admin-users', label: 'Gestion Users', icon: Shield, badge: 'Admin', adminOnly: true },
-  { id: 'team', label: 'Architecture & Modules', icon: Code2 },
 ];
 
 interface SidebarProps {
@@ -95,33 +93,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
       {/* Mobile Bottom Navigation Bar */}
       <nav aria-label="Navigation mobile" className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 py-1 px-2">
         <div className="flex items-center justify-around overflow-x-auto scrollbar-none py-1">
-          {visibleTabs.slice(0, 5).map(tab => {
+          {visibleTabs.map(tab => {
             const Icon = tab.icon;
             const isActive = currentTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => onSelectTab(tab.id)}
-                className={`flex flex-col items-center justify-center p-1 rounded-lg min-w-[58px] transition-colors ${
+                className={`flex flex-col items-center justify-center p-1 rounded-lg min-w-[56px] transition-colors ${
                   isActive ? 'text-brand-400 font-semibold' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <Icon className="w-5 h-5 mb-0.5" />
-                <span className="text-[10px] truncate max-w-[58px]">{tab.label.split(' ')[0]}</span>
+                <span className="text-[10px] truncate max-w-[56px]">{tab.label.split(' ')[0]}</span>
               </button>
             );
           })}
-          <button
-            onClick={() => onSelectTab('team')}
-            className={`flex flex-col items-center justify-center p-1 rounded-lg min-w-[58px] transition-colors ${
-              ['memories', 'complaints', 'profile', 'admin-users', 'team'].includes(currentTab)
-                ? 'text-brand-400 font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Code2 className="w-5 h-5 mb-0.5" />
-            <span className="text-[10px]">Plus...</span>
-          </button>
         </div>
       </nav>
     </>

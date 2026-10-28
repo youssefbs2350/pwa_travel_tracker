@@ -18,7 +18,6 @@ import { ActivitiesView } from './components/activities/ActivitiesView';
 import { BudgetView } from './components/budget/BudgetView';
 import { MemoriesView } from './components/memories/MemoriesView';
 import { ComplaintsView } from './components/complaints/ComplaintsView';
-import { TeamView } from './components/team/TeamView';
 
 function AppContent() {
   const { currentUser, isAdmin, isLoading: isAuthLoading } = useAuth();
@@ -74,8 +73,6 @@ function AppContent() {
         return <MemoriesView />;
       case 'complaints':
         return <ComplaintsView />;
-      case 'team':
-        return <TeamView onNavigateTab={setCurrentTab} />;
       default:
         return <OverviewView onNavigateTab={setCurrentTab} />;
     }
