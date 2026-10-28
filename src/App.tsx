@@ -43,7 +43,14 @@ function AppContent() {
 
   // IF NOT AUTHENTICATED: Display Login & Registration Screen
   if (!currentUser) {
-    return <AuthScreen />;
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col">
+        <OfflineBanner />
+        <div className="flex-1 flex flex-col">
+          <AuthScreen />
+        </div>
+      </div>
+    );
   }
 
   const renderCurrentView = () => {
