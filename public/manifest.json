@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "Travel Tracker PWA",
   "short_name": "TravelTracker",
   "description": "Application PWA tout-en-un pour organiser, optimiser et vivre vos voyages hors-ligne.",

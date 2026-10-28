@@ -21,6 +21,7 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-512x512.svg'],
       manifest: {
+        id: '/',
         name: 'Travel Tracker PWA',
         short_name: 'TravelTracker',
         description: 'Application PWA tout-en-un connectée à MongoDB et utilisable 100% hors-ligne.',
