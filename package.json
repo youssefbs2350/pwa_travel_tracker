@@ -8,6 +8,7 @@
     "server": "tsx server/index.ts",
     "client": "vite",
     "build": "tsc -b && vite build",
+    "migrate:atlas": "tsx server/migrate-atlas.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },
