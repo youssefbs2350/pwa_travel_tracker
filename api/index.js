@@ -28506,7 +28506,7 @@ var require_jsonwebtoken = __commonJS({
 // server/index.ts
 var import_express9 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
-var import_dotenv2 = __toESM(require_dist4(), 1);
+var import_dotenv3 = __toESM(require_dist4(), 1);
 import mongoose9 from "mongoose";
 
 // server/db.ts
@@ -41867,6 +41867,8 @@ var nodemailer = {
 var nodemailer_default = nodemailer;
 
 // server/mailer.ts
+var import_dotenv2 = __toESM(require_dist4(), 1);
+import_dotenv2.default.config();
 async function sendPasswordResetEmail({ to, code, userName }) {
   const smtpHost = process.env.SMTP_HOST;
   const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
@@ -42679,7 +42681,7 @@ router8.post("/", async (req, res) => {
 var sync_default = router8;
 
 // server/index.ts
-import_dotenv2.default.config();
+import_dotenv3.default.config();
 var app = (0, import_express9.default)();
 var PORT = process.env.PORT || 5e3;
 app.use((0, import_cors.default)());
