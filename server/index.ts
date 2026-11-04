@@ -33,6 +33,16 @@ app.use('/api/memories', memoryRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/sync', syncRoutes);
 
+// Middleware pour assurer la connexion MongoDB sur requêtes (utile pour serverless Vercel)
+app.use(async (req, res, next) => {
+  try {
+    await connectMongoDB();
+  } catch (err) {
+    console.error('[MongoDB Middleware Error]', err);
+  }
+  next();
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'Travel Tracker MongoDB API', time: new Date() });
@@ -51,4 +61,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;

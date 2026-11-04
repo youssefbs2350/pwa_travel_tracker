@@ -7,7 +7,7 @@
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"magenta,cyan\" \"npm run server\" \"npm run client\"",
     "server": "tsx server/index.ts",
     "client": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && esbuild server/index.ts --bundle --platform=node --format=esm --outfile=api/index.js --external:bcryptjs --external:mongoose",
     "migrate:atlas": "tsx server/migrate-atlas.ts",
     "lint": "eslint .",
     "preview": "vite preview"
