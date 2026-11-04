@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import mongoose from 'mongoose';
 import { connectMongoDB } from './db';
 import { seedMongoDBIfEmpty } from './seed';
 
@@ -23,17 +24,7 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// API Routes
-app.use('/api/users', userRoutes);
-app.use('/api/trips', tripRoutes);
-app.use('/api/places', placeRoutes);
-app.use('/api/activities', activityRoutes);
-app.use('/api/expenses', expenseRoutes);
-app.use('/api/memories', memoryRoutes);
-app.use('/api/complaints', complaintRoutes);
-app.use('/api/sync', syncRoutes);
-
-// Middleware pour assurer la connexion MongoDB sur requêtes (utile pour serverless Vercel)
+// 1. Middleware pour connecter MongoDB AVANT toute route (essentiel pour Serverless Vercel)
 app.use(async (req, res, next) => {
   try {
     await connectMongoDB();
@@ -43,10 +34,39 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'Travel Tracker MongoDB API', time: new Date() });
-});
+// 2. Health check endpoints
+const healthHandler = (_req: express.Request, res: express.Response) => {
+  const isDbConnected = mongoose.connection.readyState === 1;
+  res.json({
+    status: 'ok',
+    service: 'Travel Tracker MongoDB API',
+    database: isDbConnected ? 'connected' : 'disconnected',
+    hasMongoUri: !!process.env.MONGO_URI,
+    time: new Date()
+  });
+};
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
+
+// 3. API Routes avec préfixe /api
+app.use('/api/users', userRoutes);
+app.use('/api/trips', tripRoutes);
+app.use('/api/places', placeRoutes);
+app.use('/api/activities', activityRoutes);
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/memories', memoryRoutes);
+app.use('/api/complaints', complaintRoutes);
+app.use('/api/sync', syncRoutes);
+
+// 4. Fallback direct routes (sans préfixe /api si le rewrite Vercel le retire)
+app.use('/users', userRoutes);
+app.use('/trips', tripRoutes);
+app.use('/places', placeRoutes);
+app.use('/activities', activityRoutes);
+app.use('/expenses', expenseRoutes);
+app.use('/memories', memoryRoutes);
+app.use('/complaints', complaintRoutes);
+app.use('/sync', syncRoutes);
 
 async function startServer() {
   const isConnected = await connectMongoDB();

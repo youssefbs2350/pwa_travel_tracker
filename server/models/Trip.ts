@@ -36,4 +36,4 @@ const TripSchema = new Schema<ITrip>({
   updatedAt: { type: Date, default: Date.now }
 });
 
-export const TripModel = mongoose.model<ITrip>('Trip', TripSchema);
+export const TripModel = (mongoose.models.Trip as mongoose.Model<ITrip>) || mongoose.model<ITrip>('Trip', TripSchema);

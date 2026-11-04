@@ -34,7 +34,7 @@ const MemorySchema = new Schema<IMemory>({
   createdAt: { type: Date, default: Date.now }
 });
 
-export const MemoryModel = mongoose.model<IMemory>('Memory', MemorySchema);
+export const MemoryModel = (mongoose.models.Memory as mongoose.Model<IMemory>) || mongoose.model<IMemory>('Memory', MemorySchema);
 
 export interface IReview extends Document {
   tripId?: string;
@@ -62,4 +62,4 @@ const ReviewSchema = new Schema<IReview>({
   createdAt: { type: Date, default: Date.now }
 });
 
-export const ReviewModel = mongoose.model<IReview>('Review', ReviewSchema);
+export const ReviewModel = (mongoose.models.Review as mongoose.Model<IReview>) || mongoose.model<IReview>('Review', ReviewSchema);

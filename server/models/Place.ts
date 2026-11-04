@@ -36,4 +36,4 @@ const PlaceSchema = new Schema<IPlace>({
   createdAt: { type: Date, default: Date.now }
 });
 
-export const PlaceModel = mongoose.model<IPlace>('Place', PlaceSchema);
+export const PlaceModel = (mongoose.models.Place as mongoose.Model<IPlace>) || mongoose.model<IPlace>('Place', PlaceSchema);

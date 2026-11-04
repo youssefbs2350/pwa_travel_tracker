@@ -3,21 +3,28 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/traveltracker';
+let cachedPromise: Promise<typeof mongoose> | null = null;
 
 export async function connectMongoDB(): Promise<boolean> {
   if (mongoose.connection.readyState === 1) {
     return true;
   }
+
+  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/traveltracker';
+
   try {
-    mongoose.set('strictQuery', false);
-    await mongoose.connect(MONGO_URI, {
-      serverSelectionTimeoutMS: 5000,
-    });
-    console.log(`[MongoDB] Connecté avec succès à : ${MONGO_URI}`);
+    if (!cachedPromise) {
+      mongoose.set('strictQuery', false);
+      cachedPromise = mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 5000,
+      });
+    }
+    await cachedPromise;
+    console.log('[MongoDB] Connecté avec succès');
     return true;
   } catch (error) {
-    console.error(`[MongoDB] Erreur de connexion à ${MONGO_URI}:`, (error as Error).message);
+    cachedPromise = null;
+    console.error('[MongoDB] Erreur de connexion:', (error as Error).message);
     return false;
   }
 }

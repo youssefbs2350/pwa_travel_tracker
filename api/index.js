@@ -1,3 +1,4 @@
+import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -28506,25 +28507,31 @@ var require_jsonwebtoken = __commonJS({
 var import_express9 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_dotenv2 = __toESM(require_dist4(), 1);
+import mongoose9 from "mongoose";
 
 // server/db.ts
 var import_dotenv = __toESM(require_dist4(), 1);
 import mongoose from "mongoose";
 import_dotenv.default.config();
-var MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/traveltracker";
+var cachedPromise = null;
 async function connectMongoDB() {
   if (mongoose.connection.readyState === 1) {
     return true;
   }
+  const uri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/traveltracker";
   try {
-    mongoose.set("strictQuery", false);
-    await mongoose.connect(MONGO_URI, {
-      serverSelectionTimeoutMS: 5e3
-    });
-    console.log(`[MongoDB] Connect\xE9 avec succ\xE8s \xE0 : ${MONGO_URI}`);
+    if (!cachedPromise) {
+      mongoose.set("strictQuery", false);
+      cachedPromise = mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 5e3
+      });
+    }
+    await cachedPromise;
+    console.log("[MongoDB] Connect\xE9 avec succ\xE8s");
     return true;
   } catch (error2) {
-    console.error(`[MongoDB] Erreur de connexion \xE0 ${MONGO_URI}:`, error2.message);
+    cachedPromise = null;
+    console.error("[MongoDB] Erreur de connexion:", error2.message);
     return false;
   }
 }
@@ -28557,7 +28564,7 @@ UserSchema.methods.comparePassword = async function(candidatePassword) {
   if (!this.password) return false;
   return bcrypt.compare(candidatePassword, this.password);
 };
-var UserModel = mongoose2.model("User", UserSchema);
+var UserModel = mongoose2.models.User || mongoose2.model("User", UserSchema);
 
 // server/models/Trip.ts
 import mongoose3, { Schema as Schema2 } from "mongoose";
@@ -28578,7 +28585,7 @@ var TripSchema = new Schema2({
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
-var TripModel = mongoose3.model("Trip", TripSchema);
+var TripModel = mongoose3.models.Trip || mongoose3.model("Trip", TripSchema);
 
 // server/models/Place.ts
 import mongoose4, { Schema as Schema3 } from "mongoose";
@@ -28601,7 +28608,7 @@ var PlaceSchema = new Schema3({
   notes: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now }
 });
-var PlaceModel = mongoose4.model("Place", PlaceSchema);
+var PlaceModel = mongoose4.models.Place || mongoose4.model("Place", PlaceSchema);
 
 // server/models/Activity.ts
 import mongoose5, { Schema as Schema4 } from "mongoose";
@@ -28620,7 +28627,7 @@ var ActivitySchema = new Schema4({
   orderIndex: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 });
-var ActivityModel = mongoose5.model("Activity", ActivitySchema);
+var ActivityModel = mongoose5.models.Activity || mongoose5.model("Activity", ActivitySchema);
 
 // server/models/Expense.ts
 import mongoose6, { Schema as Schema5 } from "mongoose";
@@ -28642,7 +28649,7 @@ var ExpenseSchema = new Schema5({
   notes: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now }
 });
-var ExpenseModel = mongoose6.model("Expense", ExpenseSchema);
+var ExpenseModel = mongoose6.models.Expense || mongoose6.model("Expense", ExpenseSchema);
 
 // server/models/Memory.ts
 import mongoose7, { Schema as Schema6 } from "mongoose";
@@ -28662,7 +28669,7 @@ var MemorySchema = new Schema6({
   locationName: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now }
 });
-var MemoryModel = mongoose7.model("Memory", MemorySchema);
+var MemoryModel = mongoose7.models.Memory || mongoose7.model("Memory", MemorySchema);
 var ReviewSchema = new Schema6({
   tripId: { type: String, index: true },
   placeId: { type: String },
@@ -28675,7 +28682,7 @@ var ReviewSchema = new Schema6({
   date: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
-var ReviewModel = mongoose7.model("Review", ReviewSchema);
+var ReviewModel = mongoose7.models.Review || mongoose7.model("Review", ReviewSchema);
 
 // server/models/Complaint.ts
 import mongoose8, { Schema as Schema7 } from "mongoose";
@@ -28707,7 +28714,7 @@ var ComplaintSchema = new Schema7({
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
-var ComplaintModel = mongoose8.model("Complaint", ComplaintSchema);
+var ComplaintModel = mongoose8.models.Complaint || mongoose8.model("Complaint", ComplaintSchema);
 
 // server/seed.ts
 async function seedMongoDBIfEmpty() {
@@ -42678,14 +42685,6 @@ var PORT = process.env.PORT || 5e3;
 app.use((0, import_cors.default)());
 app.use(import_express9.default.json({ limit: "50mb" }));
 app.use(import_express9.default.urlencoded({ limit: "50mb", extended: true }));
-app.use("/api/users", users_default);
-app.use("/api/trips", trips_default);
-app.use("/api/places", places_default);
-app.use("/api/activities", activities_default);
-app.use("/api/expenses", expenses_default);
-app.use("/api/memories", memories_default);
-app.use("/api/complaints", complaints_default);
-app.use("/api/sync", sync_default);
 app.use(async (req, res, next) => {
   try {
     await connectMongoDB();
@@ -42694,9 +42693,34 @@ app.use(async (req, res, next) => {
   }
   next();
 });
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "Travel Tracker MongoDB API", time: /* @__PURE__ */ new Date() });
-});
+var healthHandler = (_req, res) => {
+  const isDbConnected = mongoose9.connection.readyState === 1;
+  res.json({
+    status: "ok",
+    service: "Travel Tracker MongoDB API",
+    database: isDbConnected ? "connected" : "disconnected",
+    hasMongoUri: !!process.env.MONGO_URI,
+    time: /* @__PURE__ */ new Date()
+  });
+};
+app.get("/api/health", healthHandler);
+app.get("/health", healthHandler);
+app.use("/api/users", users_default);
+app.use("/api/trips", trips_default);
+app.use("/api/places", places_default);
+app.use("/api/activities", activities_default);
+app.use("/api/expenses", expenses_default);
+app.use("/api/memories", memories_default);
+app.use("/api/complaints", complaints_default);
+app.use("/api/sync", sync_default);
+app.use("/users", users_default);
+app.use("/trips", trips_default);
+app.use("/places", places_default);
+app.use("/activities", activities_default);
+app.use("/expenses", expenses_default);
+app.use("/memories", memories_default);
+app.use("/complaints", complaints_default);
+app.use("/sync", sync_default);
 async function startServer() {
   const isConnected = await connectMongoDB();
   if (isConnected) {

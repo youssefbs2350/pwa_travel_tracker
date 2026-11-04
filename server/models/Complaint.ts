@@ -46,4 +46,4 @@ const ComplaintSchema = new Schema<IComplaint>({
   updatedAt: { type: Date, default: Date.now }
 });
 
-export const ComplaintModel = mongoose.model<IComplaint>('Complaint', ComplaintSchema);
+export const ComplaintModel = (mongoose.models.Complaint as mongoose.Model<IComplaint>) || mongoose.model<IComplaint>('Complaint', ComplaintSchema);

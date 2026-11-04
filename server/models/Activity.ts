@@ -32,4 +32,4 @@ const ActivitySchema = new Schema<IActivity>({
   createdAt: { type: Date, default: Date.now }
 });
 
-export const ActivityModel = mongoose.model<IActivity>('Activity', ActivitySchema);
+export const ActivityModel = (mongoose.models.Activity as mongoose.Model<IActivity>) || mongoose.model<IActivity>('Activity', ActivitySchema);

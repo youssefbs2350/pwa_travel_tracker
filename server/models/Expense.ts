@@ -34,4 +34,4 @@ const ExpenseSchema = new Schema<IExpense>({
   createdAt: { type: Date, default: Date.now }
 });
 
-export const ExpenseModel = mongoose.model<IExpense>('Expense', ExpenseSchema);
+export const ExpenseModel = (mongoose.models.Expense as mongoose.Model<IExpense>) || mongoose.model<IExpense>('Expense', ExpenseSchema);
