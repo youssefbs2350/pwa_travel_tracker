@@ -97,7 +97,6 @@ export const ActivitiesView: React.FC = () => {
 
   // Horloge dynamique et alertes intelligentes
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
-  const [autoEmailAlert, setAutoEmailAlert] = useState<boolean>(true);
   const [isSendingAlertEmail, setIsSendingAlertEmail] = useState<boolean>(false);
   const [alertEmailStatus, setAlertEmailStatus] = useState<string | null>(null);
   const alertedActivitiesRef = useRef<Set<string>>(new Set());
@@ -111,18 +110,14 @@ export const ActivitiesView: React.FC = () => {
   }, []);
 
   const handleSendAlertEmail = async (act: Activity, minutesLeft: number) => {
-    if (!currentUser?.email) {
-      setToastMessage("Veuillez vous connecter avec une adresse e-mail pour recevoir les alertes.");
-      setTimeout(() => setToastMessage(null), 3500);
-      return;
-    }
+    const targetEmail = currentUser?.email || 'tstststststs55@gmail.com';
     const linkedPlace = places.find(p => p.id === act.placeId);
     setIsSendingAlertEmail(true);
-    setAlertEmailStatus('Envoi en cours...');
+    setAlertEmailStatus('Alerte email envoyée automatiquement...');
 
     const res = await api.activities.sendAlertEmail({
-      to: currentUser.email,
-      userName: currentUser.name,
+      to: targetEmail,
+      userName: currentUser?.name || 'Voyageur',
       activityTitle: act.title,
       startTime: act.startTime,
       locationName: linkedPlace?.name,
@@ -133,17 +128,16 @@ export const ActivitiesView: React.FC = () => {
 
     setIsSendingAlertEmail(false);
     if (res.sent) {
-      setAlertEmailStatus(`✓ Envoyé`);
+      setAlertEmailStatus(`✓ Email automatique envoyé à ${targetEmail}`);
       alertedActivitiesRef.current.add(act.id);
-      setToastMessage(`Alerte email envoyée avec succès à ${currentUser.email} !`);
+      setToastMessage(`Alerte email envoyée automatiquement à ${targetEmail} (départ dans ${minutesLeft} min) !`);
     } else {
       setAlertEmailStatus(res.message || 'Alerte simulée');
       setToastMessage(`Alerte : ${res.message}`);
     }
     setTimeout(() => {
       setToastMessage(null);
-      setAlertEmailStatus(null);
-    }, 4500);
+    }, 5000);
   };
 
   // Form states
@@ -683,18 +677,18 @@ export const ActivitiesView: React.FC = () => {
 
   const nextUpcomingActivity = upcomingActivities[0] || null;
   const minUntilNext = nextUpcomingActivity ? timeToMinutes(nextUpcomingActivity.startTime) - nowMin : null;
-  const isNextImminent = minUntilNext !== null && minUntilNext > 0 && minUntilNext <= 15;
+  const isNextImminent = minUntilNext !== null && minUntilNext > 0 && minUntilNext <= 10;
 
-  // Effet d'alerte automatique par email à moins de 15 minutes du départ
+  // Effet d'alerte automatique par email à 10 minutes du départ de chaque activité (sans bouton manuel)
   useEffect(() => {
-    if (!autoEmailAlert || !nextUpcomingActivity || minUntilNext === null) return;
-    if (minUntilNext > 0 && minUntilNext <= 15) {
+    if (!nextUpcomingActivity || minUntilNext === null) return;
+    if (minUntilNext > 0 && minUntilNext <= 10) {
       if (!alertedActivitiesRef.current.has(nextUpcomingActivity.id)) {
         alertedActivitiesRef.current.add(nextUpcomingActivity.id);
         handleSendAlertEmail(nextUpcomingActivity, minUntilNext);
       }
     }
-  }, [minUntilNext, nextUpcomingActivity?.id, autoEmailAlert]);
+  }, [minUntilNext, nextUpcomingActivity?.id]);
 
   return (
     <div className="space-y-6">
@@ -789,26 +783,17 @@ export const ActivitiesView: React.FC = () => {
               </div>
             </div>
 
-            {/* Notification controls : Auto-email toggle */}
-            <div className="flex flex-wrap items-center gap-2 text-xs bg-slate-950/60 px-3 py-2 rounded-xl border border-slate-800">
-              <label className="flex items-center space-x-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={autoEmailAlert}
-                  onChange={e => setAutoEmailAlert(e.target.checked)}
-                  className="w-4 h-4 rounded text-teal-600 bg-slate-800 border-slate-700 focus:ring-teal-500 focus:ring-offset-slate-900"
-                />
-                <span className="text-slate-300 font-medium">Alerte email auto à 15 min</span>
-              </label>
-              {currentUser?.email && (
-                <span className="text-[10px] text-slate-500 hidden md:inline truncate max-w-[150px]">
-                  ({currentUser.email})
-                </span>
-              )}
+            {/* Notification automatique */}
+            <div className="flex items-center space-x-2 text-xs bg-slate-950/80 px-3 py-1.5 rounded-xl border border-teal-500/30 text-teal-300">
+              <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse"></span>
+              <span className="font-semibold">Alerte email automatique (10 min avant)</span>
+              <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">
+                &bull; {currentUser?.email || 'tstststststs55@gmail.com'}
+              </span>
             </div>
           </div>
 
-          {/* Section A : ALERTE DÉPART IMMINENT (< 15 min) */}
+          {/* Section A : ALERTE DÉPART IMMINENT (≤ 10 min) */}
           {isNextImminent && nextUpcomingActivity && (
             <div className="p-4 rounded-xl bg-gradient-to-r from-rose-950/80 via-amber-950/60 to-rose-950/80 border-2 border-rose-500/70 shadow-lg shadow-rose-950/50 space-y-3 animate-pulse">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -819,7 +804,7 @@ export const ActivitiesView: React.FC = () => {
                   <div>
                     <div className="flex items-center space-x-2">
                       <span className="text-xs uppercase font-extrabold tracking-wider text-rose-300">
-                        Alerte Départ Imminent
+                        Alerte Départ Imminent (≤ 10 min)
                       </span>
                       <span className="px-2 py-0.5 rounded-full bg-rose-500 text-slate-950 text-xs font-black">
                         Dans {minUntilNext} min !
@@ -831,30 +816,20 @@ export const ActivitiesView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Email Alert Button */}
-                <button
-                  onClick={() => handleSendAlertEmail(nextUpcomingActivity, minUntilNext)}
-                  disabled={isSendingAlertEmail}
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-500 hover:bg-rose-400 text-slate-950 flex items-center justify-center space-x-2 transition-all shadow-md self-start sm:self-auto disabled:opacity-50"
-                  title="Envoyer un rappel immédiat par email"
-                >
+                {/* Badge statut automatique (aucun bouton manuel) */}
+                <div className="flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900/90 border border-rose-500/30 text-rose-200 self-start sm:self-auto shadow-sm">
                   {isSendingAlertEmail ? (
                     <>
-                      <Clock className="w-3.5 h-3.5 animate-spin" />
-                      <span>Envoi email...</span>
-                    </>
-                  ) : alertEmailStatus ? (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      <span>{alertEmailStatus}</span>
+                      <Clock className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                      <span>Envoi email automatique...</span>
                     </>
                   ) : (
                     <>
-                      <Send className="w-3.5 h-3.5" />
-                      <span>M'alerter par email</span>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{alertEmailStatus || `Alerte email envoyée automatiquement`}</span>
                     </>
                   )}
-                </button>
+                </div>
               </div>
 
               {/* Détails du lieu et météo pour l'activité imminente */}
@@ -977,14 +952,10 @@ export const ActivitiesView: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={() => handleSendAlertEmail(nextUpcomingActivity, minUntilNext || 0)}
-                disabled={isSendingAlertEmail}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 flex items-center space-x-1.5 transition-colors self-start sm:self-auto disabled:opacity-50"
-              >
-                <Send className="w-3 h-3 text-teal-400" />
-                <span>Rappel email</span>
-              </button>
+              <div className="flex items-center space-x-1.5 text-[11px] text-teal-400 bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800 self-start sm:self-auto">
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
+                <span>Alerte email automatique déclenchée à 10 min</span>
+              </div>
             </div>
           ) : currentDayActivities.length > 0 && !ongoingActivity && !nextUpcomingActivity ? (
             /* Section D : Toutes les activités du jour sont passées */
