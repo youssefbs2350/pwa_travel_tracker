@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { ActivityModel } from '../models/Activity';
 
 const router = Router();
@@ -14,6 +15,13 @@ function minutesToTime(totalMin: number): string {
   const h = Math.floor(normalized / 60).toString().padStart(2, '0');
   const m = (normalized % 60).toString().padStart(2, '0');
   return `${h}:${m}`;
+}
+
+function buildIdFilter(id: string) {
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    return { $or: [{ _id: id }, { id }] };
+  }
+  return { id };
 }
 
 // GET activities by tripId
@@ -43,10 +51,11 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// PUT update status or details
+// PUT update status or details (gère ObjectId et id custom sans CastError)
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const activity = await ActivityModel.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const filter = buildIdFilter(req.params.id);
+    const activity = await ActivityModel.findOneAndUpdate(filter, req.body, { new: true });
     if (!activity) return res.status(404).json({ error: 'Activité non trouvée' });
     res.json(activity);
   } catch (err) {
@@ -54,25 +63,30 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE activity
+// DELETE activity (gère ObjectId et id custom sans CastError)
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    await ActivityModel.findByIdAndDelete(req.params.id);
+    const filter = buildIdFilter(req.params.id);
+    await ActivityModel.findOneAndDelete(filter);
     res.json({ message: 'Activité supprimée de MongoDB' });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
-// POST /api/activities/optimize (Youssef: Algorithme d'optimisation sans croisement horaire)
+// POST /api/activities/optimize (Algorithme d'optimisation sans croisement horaire)
 router.post('/optimize', async (req: Request, res: Response) => {
   try {
     const { tripId, dayNumber, bufferMinutes = 15 } = req.body;
-    const acts = await ActivityModel.find({ tripId, dayNumber }).sort({ startTime: 1 });
+    const dayNum = Number(dayNumber);
+    const acts = await ActivityModel.find({ tripId, dayNumber: dayNum });
 
     if (acts.length === 0) {
       return res.json({ message: 'Aucune activité à optimiser pour ce jour.', activities: [] });
     }
+
+    // Tri numérique en minutes pour éliminer tout bug de tri alphabétique
+    acts.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
     let lastEndTimeMinutes = 0;
 
@@ -81,34 +95,31 @@ router.post('/optimize', async (req: Request, res: Response) => {
       let startMin = timeToMinutes(act.startTime);
       let endMin = timeToMinutes(act.endTime);
 
-      // Calcul de la durée prévue (minimum 30 min)
       let duration = endMin - startMin;
       if (duration <= 0) duration = 90;
 
       if (i === 0) {
-        // La première activité démarre à son heure prévue ou 09:00
-        lastEndTimeMinutes = startMin + duration;
-        act.endTime = minutesToTime(lastEndTimeMinutes);
+        startMin = Math.max(startMin, 540); // Au plus tôt 09:00
+        endMin = startMin + duration;
+        lastEndTimeMinutes = endMin;
       } else {
-        // Pour les activités suivantes : suppression de tout croisement / chevauchement
         if (startMin < lastEndTimeMinutes) {
-          // Croisement détecté ! On décale l'activité après la fin de la précédente + temps de battement
           startMin = lastEndTimeMinutes + Number(bufferMinutes);
           endMin = startMin + duration;
         } else {
           endMin = startMin + duration;
         }
-
-        act.startTime = minutesToTime(startMin);
-        act.endTime = minutesToTime(endMin);
         lastEndTimeMinutes = endMin;
       }
 
+      act.startTime = minutesToTime(startMin);
+      act.endTime = minutesToTime(endMin);
       act.orderIndex = i;
       await act.save();
     }
 
-    const updated = await ActivityModel.find({ tripId, dayNumber }).sort({ startTime: 1 });
+    const updated = await ActivityModel.find({ tripId, dayNumber: dayNum });
+    updated.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
     res.json({ 
       message: 'Planning optimisé sans aucun croisement d’horaire !', 
       activities: updated 

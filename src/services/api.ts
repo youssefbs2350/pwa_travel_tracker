@@ -305,7 +305,7 @@ export const api = {
         if (res.ok) {
           const data = await res.json();
           if (data.activities && Array.isArray(data.activities)) {
-            const formatted = data.activities.map((a: any) => ({ ...a, id: a._id || a.id }));
+            const formatted = data.activities.map((a: any) => ({ ...a, id: a.id || a._id }));
             await db.activities.bulkPut(formatted);
             return formatted;
           }

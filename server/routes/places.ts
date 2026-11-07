@@ -1,7 +1,15 @@
 import { Router, Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { PlaceModel } from '../models/Place';
 
 const router = Router();
+
+function buildIdFilter(id: string) {
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    return { $or: [{ _id: id }, { id }] };
+  }
+  return { id };
+}
 
 // GET places by tripId
 router.get('/', async (req: Request, res: Response) => {
@@ -33,7 +41,8 @@ router.post('/', async (req: Request, res: Response) => {
 // DELETE place
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    await PlaceModel.findByIdAndDelete(req.params.id);
+    const filter = buildIdFilter(req.params.id);
+    await PlaceModel.findOneAndDelete(filter);
     res.json({ message: 'Lieu supprimé de MongoDB' });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

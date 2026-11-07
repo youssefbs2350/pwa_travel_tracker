@@ -28507,7 +28507,7 @@ var require_jsonwebtoken = __commonJS({
 var import_express9 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_dotenv3 = __toESM(require_dist4(), 1);
-import mongoose9 from "mongoose";
+import mongoose11 from "mongoose";
 
 // server/db.ts
 var import_dotenv = __toESM(require_dist4(), 1);
@@ -42278,7 +42278,14 @@ var trips_default = router2;
 
 // server/routes/places.ts
 var import_express3 = __toESM(require_express2(), 1);
+import mongoose9 from "mongoose";
 var router3 = (0, import_express3.Router)();
+function buildIdFilter(id) {
+  if (mongoose9.Types.ObjectId.isValid(id)) {
+    return { $or: [{ _id: id }, { id }] };
+  }
+  return { id };
+}
 router3.get("/", async (req, res) => {
   try {
     const { tripId } = req.query;
@@ -42304,7 +42311,8 @@ router3.post("/", async (req, res) => {
 });
 router3.delete("/:id", async (req, res) => {
   try {
-    await PlaceModel.findByIdAndDelete(req.params.id);
+    const filter = buildIdFilter(req.params.id);
+    await PlaceModel.findOneAndDelete(filter);
     res.json({ message: "Lieu supprim\xE9 de MongoDB" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -42314,6 +42322,7 @@ var places_default = router3;
 
 // server/routes/activities.ts
 var import_express4 = __toESM(require_express2(), 1);
+import mongoose10 from "mongoose";
 var router4 = (0, import_express4.Router)();
 function timeToMinutes(t) {
   if (!t || !t.includes(":")) return 540;
@@ -42325,6 +42334,12 @@ function minutesToTime(totalMin) {
   const h = Math.floor(normalized2 / 60).toString().padStart(2, "0");
   const m = (normalized2 % 60).toString().padStart(2, "0");
   return `${h}:${m}`;
+}
+function buildIdFilter2(id) {
+  if (mongoose10.Types.ObjectId.isValid(id)) {
+    return { $or: [{ _id: id }, { id }] };
+  }
+  return { id };
 }
 router4.get("/", async (req, res) => {
   try {
@@ -42351,7 +42366,8 @@ router4.post("/", async (req, res) => {
 });
 router4.put("/:id", async (req, res) => {
   try {
-    const activity = await ActivityModel.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const filter = buildIdFilter2(req.params.id);
+    const activity = await ActivityModel.findOneAndUpdate(filter, req.body, { new: true });
     if (!activity) return res.status(404).json({ error: "Activit\xE9 non trouv\xE9e" });
     res.json(activity);
   } catch (err) {
@@ -42360,7 +42376,8 @@ router4.put("/:id", async (req, res) => {
 });
 router4.delete("/:id", async (req, res) => {
   try {
-    await ActivityModel.findByIdAndDelete(req.params.id);
+    const filter = buildIdFilter2(req.params.id);
+    await ActivityModel.findOneAndDelete(filter);
     res.json({ message: "Activit\xE9 supprim\xE9e de MongoDB" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -42369,10 +42386,12 @@ router4.delete("/:id", async (req, res) => {
 router4.post("/optimize", async (req, res) => {
   try {
     const { tripId, dayNumber, bufferMinutes = 15 } = req.body;
-    const acts = await ActivityModel.find({ tripId, dayNumber }).sort({ startTime: 1 });
+    const dayNum = Number(dayNumber);
+    const acts = await ActivityModel.find({ tripId, dayNumber: dayNum });
     if (acts.length === 0) {
       return res.json({ message: "Aucune activit\xE9 \xE0 optimiser pour ce jour.", activities: [] });
     }
+    acts.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
     let lastEndTimeMinutes = 0;
     for (let i = 0; i < acts.length; i++) {
       const act = acts[i];
@@ -42381,8 +42400,9 @@ router4.post("/optimize", async (req, res) => {
       let duration = endMin - startMin;
       if (duration <= 0) duration = 90;
       if (i === 0) {
-        lastEndTimeMinutes = startMin + duration;
-        act.endTime = minutesToTime(lastEndTimeMinutes);
+        startMin = Math.max(startMin, 540);
+        endMin = startMin + duration;
+        lastEndTimeMinutes = endMin;
       } else {
         if (startMin < lastEndTimeMinutes) {
           startMin = lastEndTimeMinutes + Number(bufferMinutes);
@@ -42390,14 +42410,15 @@ router4.post("/optimize", async (req, res) => {
         } else {
           endMin = startMin + duration;
         }
-        act.startTime = minutesToTime(startMin);
-        act.endTime = minutesToTime(endMin);
         lastEndTimeMinutes = endMin;
       }
+      act.startTime = minutesToTime(startMin);
+      act.endTime = minutesToTime(endMin);
       act.orderIndex = i;
       await act.save();
     }
-    const updated = await ActivityModel.find({ tripId, dayNumber }).sort({ startTime: 1 });
+    const updated = await ActivityModel.find({ tripId, dayNumber: dayNum });
+    updated.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
     res.json({
       message: "Planning optimis\xE9 sans aucun croisement d\u2019horaire !",
       activities: updated
@@ -42696,7 +42717,7 @@ app.use(async (req, res, next) => {
   next();
 });
 var healthHandler = (_req, res) => {
-  const isDbConnected = mongoose9.connection.readyState === 1;
+  const isDbConnected = mongoose11.connection.readyState === 1;
   res.json({
     status: "ok",
     service: "Travel Tracker MongoDB API",

@@ -14,7 +14,16 @@ import {
   CheckCircle,
   ArrowRight,
   ShieldCheck,
-  Lock
+  Lock,
+  Sun,
+  CloudSun,
+  Cloud,
+  CloudRain,
+  CloudSnow,
+  CloudLightning,
+  CloudFog,
+  CloudDrizzle,
+  Thermometer
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useTrips } from '../../context/TripContext';
@@ -24,6 +33,21 @@ import { Modal } from '../common/Modal';
 import { api } from '../../services/api';
 import { db } from '../../db/database';
 import { useAppCurrency } from '../../utils/currency';
+import { fetchActivityWeather, ActivityWeatherData } from '../../services/weather';
+
+const WeatherIcon: React.FC<{ iconName: string; className?: string }> = ({ iconName, className }) => {
+  switch (iconName) {
+    case 'Sun': return <Sun className={className} />;
+    case 'CloudSun': return <CloudSun className={className} />;
+    case 'Cloud': return <Cloud className={className} />;
+    case 'CloudRain': return <CloudRain className={className} />;
+    case 'CloudSnow': return <CloudSnow className={className} />;
+    case 'CloudLightning': return <CloudLightning className={className} />;
+    case 'CloudFog': return <CloudFog className={className} />;
+    case 'CloudDrizzle': return <CloudDrizzle className={className} />;
+    default: return <Sun className={className} />;
+  }
+};
 
 function timeToMinutes(t: string): number {
   if (!t || !t.includes(':')) return 540; // 09:00
@@ -66,6 +90,7 @@ export const ActivitiesView: React.FC = () => {
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [activityWeatherMap, setActivityWeatherMap] = useState<Record<string, ActivityWeatherData>>({});
 
   // Form states
   const [title, setTitle] = useState('');
@@ -200,18 +225,20 @@ export const ActivitiesView: React.FC = () => {
 
   const days = getDaysArray();
 
-  // Detect schedule overlap / crossings
+  // Detect schedule overlap / crossings (tri et calcul stricts en minutes)
   const getConflicts = (day: number) => {
     const dayActs = activities
       .filter(a => a.dayNumber === day)
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+      .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
     const conflicts: { id1: string; id2: string; message: string; act1Title: string; act2Title: string }[] = [];
 
     for (let i = 0; i < dayActs.length - 1; i++) {
       const current = dayActs[i];
       const next = dayActs[i + 1];
-      if (current.endTime > next.startTime) {
+      const currentEnd = timeToMinutes(current.endTime);
+      const nextStart = timeToMinutes(next.startTime);
+      if (currentEnd > nextStart) {
         conflicts.push({
           id1: current.id,
           id2: next.id,
@@ -229,11 +256,11 @@ export const ActivitiesView: React.FC = () => {
   // ALGORITHME AVANCÉ : OPTIMISATION SANS CROISEMENT (YOUSSEF)
   const handleAutoOptimize = async () => {
     setIsOptimizing(true);
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => setTimeout(r, 300));
 
     const dayActs = activities
       .filter(a => a.dayNumber === selectedDay)
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+      .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
     if (dayActs.length === 0) {
       setIsOptimizing(false);
@@ -241,6 +268,7 @@ export const ActivitiesView: React.FC = () => {
     }
 
     const bufferMinutes = 15; // 15 min de battement pour déplacement
+    const updatedDayActs: Activity[] = [];
     let lastEndMin = 0;
 
     for (let i = 0; i < dayActs.length; i++) {
@@ -248,35 +276,58 @@ export const ActivitiesView: React.FC = () => {
       let startMin = timeToMinutes(act.startTime);
       let endMin = timeToMinutes(act.endTime);
 
-      // Conserver la durée originale de l'activité
       let duration = endMin - startMin;
       if (duration <= 0) duration = 90;
 
+      let newStartMin = startMin;
+      let newEndMin = endMin;
+
       if (i === 0) {
-        lastEndMin = startMin + duration;
-        const newEnd = minutesToTime(lastEndMin);
-        await api.activities.update(act.id, { endTime: newEnd, orderIndex: i });
+        newStartMin = Math.max(startMin, 540); // 09:00 au plus tôt
+        newEndMin = newStartMin + duration;
+        lastEndMin = newEndMin;
       } else {
-        // Si l'activité démarre avant la fin de la précédente -> CROISEMENT !
         if (startMin < lastEndMin) {
-          startMin = lastEndMin + bufferMinutes;
-          endMin = startMin + duration;
+          newStartMin = lastEndMin + bufferMinutes;
+          newEndMin = newStartMin + duration;
         } else {
-          endMin = startMin + duration;
+          newEndMin = newStartMin + duration;
         }
-
-        const newStart = minutesToTime(startMin);
-        const newEnd = minutesToTime(endMin);
-        lastEndMin = endMin;
-
-        await api.activities.update(act.id, {
-          startTime: newStart,
-          endTime: newEnd,
-          orderIndex: i
-        });
+        lastEndMin = newEndMin;
       }
+
+      updatedDayActs.push({
+        ...act,
+        startTime: minutesToTime(newStartMin),
+        endTime: minutesToTime(newEndMin),
+        orderIndex: i
+      });
     }
 
+    // 1. Mettre à jour React state immédiatement pour fluidité visuelle
+    setActivities(prev => prev.map(a => updatedDayActs.find(u => u.id === a.id) || a));
+
+    // 2. Persister immédiatement dans Dexie (IndexedDB local)
+    await db.activities.bulkPut(updatedDayActs);
+
+    // 3. Persister sur l'API MongoDB
+    try {
+      if (activeTrip) {
+        await api.activities.optimize(activeTrip.id, selectedDay, bufferMinutes);
+      }
+    } catch {
+      await Promise.all(
+        updatedDayActs.map(u =>
+          api.activities.update(u.id, {
+            startTime: u.startTime,
+            endTime: u.endTime,
+            orderIndex: u.orderIndex
+          })
+        )
+      );
+    }
+
+    // 4. Synchroniser avec MongoDB
     await loadData();
     setIsOptimizing(false);
     confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
@@ -465,11 +516,15 @@ export const ActivitiesView: React.FC = () => {
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingActivity) return;
+    if (!editingActivity || !activeTrip) return;
+
+    const tripStart = new Date(activeTrip.startDate);
+    const actDate = new Date(tripStart.getTime() + (Number(dayNumber) - 1) * 86400000).toISOString().split('T')[0];
 
     await api.activities.update(editingActivity.id, {
       title,
       dayNumber: Number(dayNumber),
+      date: actDate,
       startTime,
       endTime,
       placeId: placeId || undefined,
@@ -486,11 +541,14 @@ export const ActivitiesView: React.FC = () => {
     e.preventDefault();
     if (!activeTrip) return;
 
+    const tripStart = new Date(activeTrip.startDate);
+    const actDate = new Date(tripStart.getTime() + (Number(dayNumber) - 1) * 86400000).toISOString().split('T')[0];
+
     await api.activities.create({
       tripId: activeTrip.id,
       placeId: placeId || undefined,
       dayNumber: Number(dayNumber),
-      date: activeTrip.startDate,
+      date: actDate,
       startTime,
       endTime,
       title,
@@ -514,9 +572,45 @@ export const ActivitiesView: React.FC = () => {
 
   const currentDayActivities = activities
     .filter(a => a.dayNumber === selectedDay)
-    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
   const completedCount = currentDayActivities.filter(a => a.status === 'Terminé').length;
+
+  // Charger la météo de chaque activité du jour sélectionné
+  useEffect(() => {
+    if (!activeTrip || currentDayActivities.length === 0) return;
+
+    let isMounted = true;
+    const loadWeatherForCurrentDay = async () => {
+      const newMap: Record<string, ActivityWeatherData> = {};
+      const tripStart = new Date(activeTrip.startDate);
+
+      for (const act of currentDayActivities) {
+        const linkedPlace = places.find(p => p.id === act.placeId);
+        // Si le lieu est rattaché on prend ses coordonnées exactes, sinon celles du premier lieu ou défaut
+        const lat = linkedPlace?.latitude ?? places[0]?.latitude;
+        const lon = linkedPlace?.longitude ?? places[0]?.longitude;
+
+        if (lat !== undefined && lon !== undefined) {
+          const actDate = act.date || new Date(tripStart.getTime() + (act.dayNumber - 1) * 86400000).toISOString().split('T')[0];
+          const weather = await fetchActivityWeather(lat, lon, actDate);
+          if (weather && isMounted) {
+            newMap[act.id] = weather;
+          }
+        }
+      }
+
+      if (isMounted) {
+        setActivityWeatherMap(prev => ({ ...prev, ...newMap }));
+      }
+    };
+
+    loadWeatherForCurrentDay();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedDay, activities, places, activeTrip?.id]);
 
   return (
     <div className="space-y-6">
@@ -665,14 +759,27 @@ export const ActivitiesView: React.FC = () => {
       )}
 
       {/* Day Progress Summary */}
-      <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs">
-        <div className="flex items-center space-x-3">
-          <span className="text-slate-400">Progression du Jour {selectedDay} :</span>
-          <span className="font-bold text-white">
-            {completedCount} / {currentDayActivities.length} activités réalisées
-          </span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center space-x-2">
+            <span className="text-slate-400">Progression du Jour {selectedDay} :</span>
+            <span className="font-bold text-white">
+              {completedCount} / {currentDayActivities.length} activités réalisées
+            </span>
+          </div>
+
+          {/* Météo globale du jour */}
+          {Object.values(activityWeatherMap)[0] && (
+            <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700 text-slate-200">
+              <Thermometer className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-slate-400">Météo prévisionnelle :</span>
+              <span className="font-bold">{Object.values(activityWeatherMap)[0].emoji} {Object.values(activityWeatherMap)[0].temperature}°C</span>
+              <span className="text-slate-300 font-medium">({Object.values(activityWeatherMap)[0].label})</span>
+            </div>
+          )}
         </div>
-        <div className="w-32 bg-slate-800 h-2 rounded-full overflow-hidden">
+
+        <div className="w-full sm:w-32 bg-slate-800 h-2 rounded-full overflow-hidden">
           <div
             className="bg-teal-500 h-full rounded-full transition-all duration-500"
             style={{
@@ -770,6 +877,7 @@ export const ActivitiesView: React.FC = () => {
           currentDayActivities.map((act, index) => {
             const linkedPlace = places.find(p => p.id === act.placeId);
             const hasConflict = dayConflicts.some(c => c.id1 === act.id || c.id2 === act.id);
+            const weather = activityWeatherMap[act.id];
 
             return (
               <div
@@ -808,8 +916,8 @@ export const ActivitiesView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Title & Linked Place */}
-                <div className="flex-1 space-y-1">
+                {/* Title, Weather & Exact Location */}
+                <div className="flex-1 space-y-1.5">
                   <div className="flex items-center space-x-2">
                     <h4 className={`text-sm font-bold ${
                       act.status === 'Terminé' ? 'line-through text-slate-400' : 'text-white'
@@ -832,15 +940,65 @@ export const ActivitiesView: React.FC = () => {
                     )}
                   </div>
 
-                  {linkedPlace && (
-                    <div className="flex items-center space-x-1 text-xs text-brand-400">
-                      <MapPin className="w-3 h-3 flex-shrink-0" />
-                      <span>{linkedPlace.name} ({linkedPlace.category})</span>
-                    </div>
-                  )}
+                  {/* Badges Météo et Emplacement Exact */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Badge Météo */}
+                    {weather ? (
+                      <div
+                        className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border shadow-sm transition-all ${
+                          weather.isRainy
+                            ? 'bg-blue-950/40 border-blue-500/40 text-blue-200'
+                            : 'bg-amber-950/30 border-amber-500/30 text-amber-200'
+                        }`}
+                        title={`Météo pour le ${weather.dateStr} : ${weather.label} (${weather.tempMin}°C à ${weather.tempMax}°C)`}
+                      >
+                        <WeatherIcon iconName={weather.iconName} className={`w-3.5 h-3.5 ${weather.isRainy ? 'text-blue-400' : 'text-amber-400'}`} />
+                        <span>{weather.emoji}</span>
+                        <span className="font-extrabold">{weather.temperature}°C</span>
+                        <span className="text-[11px] text-slate-300 font-normal">• {weather.label}</span>
+                        {weather.isRainy && (
+                          <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1 rounded font-semibold">☔ Parapluie</span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center space-x-1 text-slate-500 text-[11px] px-2 py-0.5 rounded bg-slate-800/40">
+                        <Sun className="w-3 h-3 text-slate-600 animate-pulse" />
+                        <span>Météo...</span>
+                      </div>
+                    )}
+
+                    {/* Badge Emplacement Exact */}
+                    {linkedPlace ? (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${linkedPlace.latitude},${linkedPlace.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800/90 hover:bg-slate-750 text-emerald-300 border border-emerald-500/30 transition-colors shadow-sm group"
+                        title={`Emplacement exact : ${linkedPlace.name} - ${linkedPlace.address}. Cliquer pour ouvrir dans Google Maps`}
+                      >
+                        <MapPin className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 group-hover:scale-110 transition-transform" />
+                        <span className="font-semibold text-white truncate max-w-[150px] sm:max-w-[220px]">
+                          {linkedPlace.name}
+                        </span>
+                        {linkedPlace.address && (
+                          <span className="text-slate-400 text-[11px] hidden md:inline truncate max-w-[140px]">
+                            ({linkedPlace.address})
+                          </span>
+                        )}
+                        <span className="text-[10px] text-emerald-400/80 font-mono">
+                          [{linkedPlace.latitude.toFixed(2)}, {linkedPlace.longitude.toFixed(2)}]
+                        </span>
+                      </a>
+                    ) : (
+                      <div className="inline-flex items-center space-x-1 text-xs text-slate-400 px-2 py-0.5 rounded bg-slate-800/40">
+                        <MapPin className="w-3 h-3 text-slate-500" />
+                        <span>{activeTrip?.destination || 'Destination'}</span>
+                      </div>
+                    )}
+                  </div>
 
                   {act.description && (
-                    <p className="text-xs text-slate-400">{act.description}</p>
+                    <p className="text-xs text-slate-400 leading-relaxed">{act.description}</p>
                   )}
                 </div>
 
