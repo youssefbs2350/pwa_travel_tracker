@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   CalendarDays, 
   Plus, 
@@ -100,6 +100,29 @@ export const ActivitiesView: React.FC = () => {
   const [isSendingAlertEmail, setIsSendingAlertEmail] = useState<boolean>(false);
   const [alertEmailStatus, setAlertEmailStatus] = useState<string | null>(null);
   const alertedActivitiesRef = useRef<Set<string>>(new Set());
+
+  // Déterminer le jour actuel du voyage selon la date réelle du jour
+  const getCurrentDayOfTrip = useCallback((): number => {
+    if (!activeTrip?.startDate) return 1;
+    const start = new Date(activeTrip.startDate);
+    start.setHours(0, 0, 0, 0);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const diff = Math.floor((now.getTime() - start.getTime()) / 86400000) + 1;
+    if (diff < 1) return 1;
+    const maxDay = activeTrip.endDate 
+      ? Math.max(1, Math.floor((new Date(activeTrip.endDate).getTime() - start.getTime()) / 86400000) + 1)
+      : Math.max(...activities.map(a => a.dayNumber || 1), 7);
+    return Math.min(diff, maxDay);
+  }, [activeTrip?.startDate, activeTrip?.endDate, activities]);
+
+  // Initialiser automatiquement au jour courant du séjour lors du changement de voyage
+  useEffect(() => {
+    if (activeTrip) {
+      const currentDay = getCurrentDayOfTrip();
+      setSelectedDay(currentDay);
+    }
+  }, [activeTrip?.id]);
 
   // Horloge en direct mise à jour toutes les 10 secondes
   useEffect(() => {
@@ -668,17 +691,31 @@ export const ActivitiesView: React.FC = () => {
     };
   }, [selectedDay, activities, places, activeTrip?.id]);
 
-  // Calcul temps réel & statut dynamique des activités du jour
+  // Calcul temps réel & statut dynamique des activités sur TOUT le séjour
   const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
   const timeFormatted = `${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
+  const todayDateStr = currentTime.toISOString().split('T')[0];
+  const currentTripDay = getCurrentDayOfTrip();
 
-  const ongoingActivity = currentDayActivities.find(act => {
+  // Activités prévues AUJOURD'HUI sur l'ensemble du séjour (peu importe l'onglet sélectionné)
+  const todayTripActivities = activities.filter(act => {
+    if (act.date) {
+      return act.date.split('T')[0] === todayDateStr;
+    }
+    return act.dayNumber === currentTripDay;
+  }).sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+
+  // Activités pour le live : priorité aux activités réelles d'aujourd'hui sur tout le séjour
+  const liveMonitoringActivities = todayTripActivities.length > 0 ? todayTripActivities : currentDayActivities;
+  const liveDayNumber = todayTripActivities.length > 0 ? (todayTripActivities[0]?.dayNumber || currentTripDay) : selectedDay;
+
+  const ongoingActivity = liveMonitoringActivities.find(act => {
     const s = timeToMinutes(act.startTime);
     const e = timeToMinutes(act.endTime);
     return nowMin >= s && nowMin < e;
   });
 
-  const upcomingActivities = currentDayActivities
+  const upcomingActivities = liveMonitoringActivities
     .filter(act => timeToMinutes(act.startTime) > nowMin && act.status !== 'Terminé')
     .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
@@ -785,7 +822,7 @@ export const ActivitiesView: React.FC = () => {
                   <Clock className="w-3.5 h-3.5 text-teal-400" />
                   <span>Heure système : <strong className="text-white font-mono">{timeFormatted}</strong></span>
                   <span>•</span>
-                  <span>Jour {selectedDay} ({activeTrip.title || activeTrip.destination})</span>
+                  <span>Jour {liveDayNumber} ({activeTrip.title || activeTrip.destination})</span>
                 </div>
               </div>
             </div>
@@ -818,7 +855,7 @@ export const ActivitiesView: React.FC = () => {
                       </span>
                     </div>
                     <h4 className="text-base font-bold text-white mt-0.5">
-                      « {nextUpcomingActivity.title} » débute à {nextUpcomingActivity.startTime}
+                      « {nextUpcomingActivity.title} » (Jour {nextUpcomingActivity.dayNumber || liveDayNumber}) débute à {nextUpcomingActivity.startTime}
                     </h4>
                   </div>
                 </div>

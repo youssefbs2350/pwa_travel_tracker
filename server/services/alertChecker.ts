@@ -4,6 +4,7 @@ import { PlaceModel } from '../models/Place';
 import { UserModel } from '../models/User';
 import { sendActivityAlertEmail } from '../mailer';
 import { connectMongoDB } from '../db';
+import mongoose from 'mongoose';
 
 function timeToMinutes(t: string): number {
   if (!t || !t.includes(':')) return 540;
@@ -12,10 +13,11 @@ function timeToMinutes(t: string): number {
 }
 
 /**
- * Service d'arrière-plan autonome :
- * Vérifie toutes les activités prévues dans moins de 10 minutes,
- * envoie l'e-mail d'alerte automatiquement et verrouille en BDD pour empêcher tout renvoi.
- * Fonctionne même lorsque l'utilisateur n'a pas l'application ouverte !
+ * Service d'arrière-plan autonome pour tout le séjour :
+ * - Analyse TOUTES les activités du séjour (Jour 1, Jour 2, Jour 3, etc.)
+ * - Détecte celles prévues pour le jour actuel qui débutent dans ≤ 10 minutes
+ * - Envoie l'alerte email à tous les voyageurs associés au voyage (créateur et participants)
+ * - Empêche strictement tout doublon grâce à alertSent: true
  */
 export async function checkAndSendDueActivityAlerts(): Promise<{
   checked: number;
@@ -25,7 +27,7 @@ export async function checkAndSendDueActivityAlerts(): Promise<{
   await connectMongoDB();
 
   const now = new Date();
-  // Heure en UTC et heure en UTC+1 (fuseau utilisateur)
+  // Fuseaux horaires : UTC et UTC+1 (fuseau utilisateur France / Tunisie / Europe centrale)
   const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const localMinutes = ((now.getUTCHours() + 1) % 24) * 60 + now.getUTCMinutes();
 
@@ -43,38 +45,81 @@ export async function checkAndSendDueActivityAlerts(): Promise<{
   let alertedCount = 0;
 
   for (const act of activities) {
-    const matchesDate = !act.date || act.date === todayUtc || act.date === todayLocal;
-    if (!matchesDate) continue;
+    // 1. Récupération du voyage associé
+    const tripFilter = mongoose.Types.ObjectId.isValid(act.tripId)
+      ? { $or: [{ _id: act.tripId }, { id: act.tripId }] }
+      : { id: act.tripId };
+    const trip = await TripModel.findOne(tripFilter);
 
+    // 2. Calcul de la date exacte de l'activité sur le séjour (Jour 1, Jour 2, ..., Jour N)
+    let activityDateStr: string | null = null;
+    if (act.date) {
+      activityDateStr = act.date.includes('T') ? act.date.split('T')[0] : act.date.trim();
+    } else if (trip?.startDate) {
+      // Déduire la date réelle : startDate + (dayNumber - 1) jours
+      const tripStart = new Date(trip.startDate);
+      const dayOffset = Math.max(0, (Number(act.dayNumber) || 1) - 1);
+      const computedDate = new Date(tripStart.getTime() + dayOffset * 86400000);
+      activityDateStr = computedDate.toISOString().split('T')[0];
+    }
+
+    // 3. Vérification si l'activité a lieu AUJOURD'HUI (pour n'importe quel jour du séjour)
+    const isToday = !activityDateStr || activityDateStr === todayUtc || activityDateStr === todayLocal;
+    if (!isToday) {
+      continue;
+    }
+
+    // 4. Calcul du temps restant avant le début de l'activité (<= 10 min)
     const startMin = timeToMinutes(act.startTime);
     const diffLocal = startMin - localMinutes;
     const diffUtc = startMin - utcMinutes;
 
     const isDue = (diffLocal > 0 && diffLocal <= 10) || (diffUtc > 0 && diffUtc <= 10);
+    if (!isDue) {
+      continue;
+    }
 
-    if (isDue) {
-      const minutesRemaining = (diffLocal > 0 && diffLocal <= 10) ? diffLocal : diffUtc;
+    const minutesRemaining = (diffLocal > 0 && diffLocal <= 10) ? diffLocal : diffUtc;
+    const place = act.placeId ? await PlaceModel.findOne({ id: act.placeId }) : null;
 
-      const trip = await TripModel.findOne({ id: act.tripId });
-      const place = act.placeId ? await PlaceModel.findOne({ id: act.placeId }) : null;
+    // 5. Collecter tous les destinataires du voyage (créateur + participants enregistrés)
+    // Permet à deux voyageurs ou plus ayant le même voyage de recevoir chacun l'alerte
+    const recipientsMap = new Map<string, string>(); // email -> name
 
-      let recipientEmail = 'youssefbs2350@gmail.com';
-      let recipientName = 'Voyageur';
+    // A) Créateur du voyage
+    if (trip?.userId) {
+      const creatorFilter = mongoose.Types.ObjectId.isValid(trip.userId)
+        ? { $or: [{ _id: trip.userId }, { id: trip.userId }] }
+        : { id: trip.userId };
+      const creator = await UserModel.findOne(creatorFilter);
+      if (creator?.email) {
+        recipientsMap.set(creator.email.toLowerCase().trim(), creator.name);
+      }
+    }
 
-      if (trip?.participants && trip.participants.length > 0) {
-        const foundUser = await UserModel.findOne({ name: trip.participants[0] });
-        if (foundUser?.email) {
-          recipientEmail = foundUser.email;
-          recipientName = foundUser.name;
+    // B) Participants du voyage
+    if (trip?.participants && Array.isArray(trip.participants)) {
+      for (const pName of trip.participants) {
+        if (!pName || pName.toLowerCase().includes('compagnon')) continue;
+        const participantUser = await UserModel.findOne({
+          name: { $regex: new RegExp(`^${pName.trim()}$`, 'i') }
+        });
+        if (participantUser?.email) {
+          recipientsMap.set(participantUser.email.toLowerCase().trim(), participantUser.name);
         }
       }
+    }
 
-      if (!recipientEmail || recipientEmail === 'noreply@traveltracker.app') {
-        const defaultUser = await UserModel.findOne({ email: 'youssefbs2350@gmail.com' });
-        recipientEmail = defaultUser?.email || 'youssefbs2350@gmail.com';
-      }
+    // C) Fallback si aucun email trouvé
+    if (recipientsMap.size === 0) {
+      recipientsMap.set('youssefbs2350@gmail.com', 'Voyageur');
+    }
 
-      console.log(`[Auto-Alert Server] Envoi automatique pour "${act.title}" (${act.startTime}) à ${recipientEmail}`);
+    let emailSentToAtLeastOne = false;
+
+    // 6. Envoi des emails à chaque voyageur concerné
+    for (const [recipientEmail, recipientName] of recipientsMap.entries()) {
+      console.log(`[Auto-Alert Server] Envoi pour "${act.title}" (Jour ${act.dayNumber || 1}, ${act.startTime}) à ${recipientEmail}`);
 
       const result = await sendActivityAlertEmail({
         to: recipientEmail,
@@ -88,14 +133,19 @@ export async function checkAndSendDueActivityAlerts(): Promise<{
       });
 
       if (result.sent) {
-        act.alertSent = true;
-        act.alertSentAt = new Date().toISOString();
-        await act.save();
-        alertedCount++;
-        details.push(`Alerte envoyée pour "${act.title}" (${act.startTime}) à ${recipientEmail}`);
+        emailSentToAtLeastOne = true;
+        details.push(`Alerte envoyée pour "${act.title}" (Jour ${act.dayNumber || 1}, ${act.startTime}) à ${recipientEmail}`);
       } else {
-        details.push(`Échec envoi "${act.title}": ${result.message}`);
+        details.push(`Échec envoi "${act.title}" à ${recipientEmail}: ${result.message}`);
       }
+    }
+
+    // 7. Verrouillage définitif en base de données : une seule alerte par activité
+    if (emailSentToAtLeastOne) {
+      act.alertSent = true;
+      act.alertSentAt = new Date().toISOString();
+      await act.save();
+      alertedCount++;
     }
   }
 

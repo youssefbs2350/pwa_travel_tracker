@@ -28521,7 +28521,7 @@ var require_jsonwebtoken = __commonJS({
 var import_express10 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_dotenv3 = __toESM(require_dist4(), 1);
-import mongoose11 from "mongoose";
+import mongoose12 from "mongoose";
 
 // server/db.ts
 var import_dotenv = __toESM(require_dist4(), 1);
@@ -42473,9 +42473,10 @@ var places_default = router3;
 
 // server/routes/activities.ts
 var import_express4 = __toESM(require_express2(), 1);
-import mongoose10 from "mongoose";
+import mongoose11 from "mongoose";
 
 // server/services/alertChecker.ts
+import mongoose10 from "mongoose";
 function timeToMinutes(t) {
   if (!t || !t.includes(":")) return 540;
   const [h, m] = t.split(":").map(Number);
@@ -42496,30 +42497,55 @@ async function checkAndSendDueActivityAlerts() {
   const details = [];
   let alertedCount = 0;
   for (const act of activities) {
-    const matchesDate = !act.date || act.date === todayUtc || act.date === todayLocal;
-    if (!matchesDate) continue;
+    const tripFilter = mongoose10.Types.ObjectId.isValid(act.tripId) ? { $or: [{ _id: act.tripId }, { id: act.tripId }] } : { id: act.tripId };
+    const trip = await TripModel.findOne(tripFilter);
+    let activityDateStr = null;
+    if (act.date) {
+      activityDateStr = act.date.includes("T") ? act.date.split("T")[0] : act.date.trim();
+    } else if (trip?.startDate) {
+      const tripStart = new Date(trip.startDate);
+      const dayOffset = Math.max(0, (Number(act.dayNumber) || 1) - 1);
+      const computedDate = new Date(tripStart.getTime() + dayOffset * 864e5);
+      activityDateStr = computedDate.toISOString().split("T")[0];
+    }
+    const isToday = !activityDateStr || activityDateStr === todayUtc || activityDateStr === todayLocal;
+    if (!isToday) {
+      continue;
+    }
     const startMin = timeToMinutes(act.startTime);
     const diffLocal = startMin - localMinutes;
     const diffUtc = startMin - utcMinutes;
     const isDue = diffLocal > 0 && diffLocal <= 10 || diffUtc > 0 && diffUtc <= 10;
-    if (isDue) {
-      const minutesRemaining = diffLocal > 0 && diffLocal <= 10 ? diffLocal : diffUtc;
-      const trip = await TripModel.findOne({ id: act.tripId });
-      const place = act.placeId ? await PlaceModel.findOne({ id: act.placeId }) : null;
-      let recipientEmail = "youssefbs2350@gmail.com";
-      let recipientName = "Voyageur";
-      if (trip?.participants && trip.participants.length > 0) {
-        const foundUser = await UserModel.findOne({ name: trip.participants[0] });
-        if (foundUser?.email) {
-          recipientEmail = foundUser.email;
-          recipientName = foundUser.name;
+    if (!isDue) {
+      continue;
+    }
+    const minutesRemaining = diffLocal > 0 && diffLocal <= 10 ? diffLocal : diffUtc;
+    const place = act.placeId ? await PlaceModel.findOne({ id: act.placeId }) : null;
+    const recipientsMap = /* @__PURE__ */ new Map();
+    if (trip?.userId) {
+      const creatorFilter = mongoose10.Types.ObjectId.isValid(trip.userId) ? { $or: [{ _id: trip.userId }, { id: trip.userId }] } : { id: trip.userId };
+      const creator = await UserModel.findOne(creatorFilter);
+      if (creator?.email) {
+        recipientsMap.set(creator.email.toLowerCase().trim(), creator.name);
+      }
+    }
+    if (trip?.participants && Array.isArray(trip.participants)) {
+      for (const pName of trip.participants) {
+        if (!pName || pName.toLowerCase().includes("compagnon")) continue;
+        const participantUser = await UserModel.findOne({
+          name: { $regex: new RegExp(`^${pName.trim()}$`, "i") }
+        });
+        if (participantUser?.email) {
+          recipientsMap.set(participantUser.email.toLowerCase().trim(), participantUser.name);
         }
       }
-      if (!recipientEmail || recipientEmail === "noreply@traveltracker.app") {
-        const defaultUser = await UserModel.findOne({ email: "youssefbs2350@gmail.com" });
-        recipientEmail = defaultUser?.email || "youssefbs2350@gmail.com";
-      }
-      console.log(`[Auto-Alert Server] Envoi automatique pour "${act.title}" (${act.startTime}) \xE0 ${recipientEmail}`);
+    }
+    if (recipientsMap.size === 0) {
+      recipientsMap.set("youssefbs2350@gmail.com", "Voyageur");
+    }
+    let emailSentToAtLeastOne = false;
+    for (const [recipientEmail, recipientName] of recipientsMap.entries()) {
+      console.log(`[Auto-Alert Server] Envoi pour "${act.title}" (Jour ${act.dayNumber || 1}, ${act.startTime}) \xE0 ${recipientEmail}`);
       const result = await sendActivityAlertEmail({
         to: recipientEmail,
         userName: recipientName,
@@ -42531,14 +42557,17 @@ async function checkAndSendDueActivityAlerts() {
         minutesRemaining
       });
       if (result.sent) {
-        act.alertSent = true;
-        act.alertSentAt = (/* @__PURE__ */ new Date()).toISOString();
-        await act.save();
-        alertedCount++;
-        details.push(`Alerte envoy\xE9e pour "${act.title}" (${act.startTime}) \xE0 ${recipientEmail}`);
+        emailSentToAtLeastOne = true;
+        details.push(`Alerte envoy\xE9e pour "${act.title}" (Jour ${act.dayNumber || 1}, ${act.startTime}) \xE0 ${recipientEmail}`);
       } else {
-        details.push(`\xC9chec envoi "${act.title}": ${result.message}`);
+        details.push(`\xC9chec envoi "${act.title}" \xE0 ${recipientEmail}: ${result.message}`);
       }
+    }
+    if (emailSentToAtLeastOne) {
+      act.alertSent = true;
+      act.alertSentAt = (/* @__PURE__ */ new Date()).toISOString();
+      await act.save();
+      alertedCount++;
     }
   }
   return { checked: activities.length, alertedCount, details };
@@ -42558,7 +42587,7 @@ function minutesToTime(totalMin) {
   return `${h}:${m}`;
 }
 function buildIdFilter2(id) {
-  if (mongoose10.Types.ObjectId.isValid(id)) {
+  if (mongoose11.Types.ObjectId.isValid(id)) {
     return { $or: [{ _id: id }, { id }] };
   }
   return { id };
@@ -42995,7 +43024,7 @@ app.use(async (req, res, next) => {
   next();
 });
 var healthHandler = (_req, res) => {
-  const isDbConnected = mongoose11.connection.readyState === 1;
+  const isDbConnected = mongoose12.connection.readyState === 1;
   res.json({
     status: "ok",
     service: "Travel Tracker MongoDB API",
