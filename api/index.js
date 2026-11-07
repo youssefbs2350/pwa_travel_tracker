@@ -42993,6 +42993,28 @@ var healthHandler = (_req, res) => {
 };
 app.get("/api/health", healthHandler);
 app.get("/health", healthHandler);
+var cronHandler = async (_req, res) => {
+  try {
+    const result = await checkAndSendDueActivityAlerts();
+    res.json({
+      success: true,
+      service: "Auto Alert Cron Engine",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      ...result
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
+app.all("/api/cron/check-alerts", cronHandler);
+app.all("/api/cron", cronHandler);
+app.all("/api/activities/check-alerts", cronHandler);
+app.all("/cron/check-alerts", cronHandler);
+app.all("/cron", cronHandler);
+app.all("/check-alerts", cronHandler);
 app.use("/api/users", users_default);
 app.use("/api/trips", trips_default);
 app.use("/api/places", places_default);
