@@ -21,18 +21,17 @@ export interface SendActivityAlertEmailParams {
   minutesRemaining?: number;
 }
 
-// ─── Default Credentials (fournis pour Travel Tracker) ────────────────────────
+// ─── Default Credentials ───────────────────────────────────────────────────────
 const DEFAULT_SMTP_HOST = 'smtp.gmail.com';
 const DEFAULT_SMTP_PORT = 465;
 const DEFAULT_SMTP_USER = 'tstststststs55@gmail.com';
-const DEFAULT_SMTP_PASS = 'brezktmadvmqvjwe';
 const DEFAULT_SMTP_FROM = 'Travel Tracker PWA <tstststststs55@gmail.com>';
 
 function getSmtpConfig() {
   const host = process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
   const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : DEFAULT_SMTP_PORT;
   const user = process.env.SMTP_USER || DEFAULT_SMTP_USER;
-  const pass = (process.env.SMTP_PASS || DEFAULT_SMTP_PASS).replace(/\s+/g, '');
+  const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
   const from = process.env.SMTP_FROM || DEFAULT_SMTP_FROM;
   return { host, port, user, pass, from };
 }

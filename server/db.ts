@@ -10,8 +10,11 @@ export async function connectMongoDB(): Promise<boolean> {
     return true;
   }
 
-  const ATLAS_FALLBACK_URI = 'mongodb+srv://youssefbs11_db_user:kc0DIrCVbznUYSEs@gogywt5.mongodb.net/traveltracker?retryWrites=true&w=majority&authSource=admin';
-  const uri = process.env.MONGO_URI || ATLAS_FALLBACK_URI;
+  const uri = process.env.MONGO_URI;
+  if (!uri) {
+    console.error('[MongoDB] MONGO_URI non définie dans les variables d\'environnement.');
+    return false;
+  }
 
   try {
     if (!cachedPromise) {
