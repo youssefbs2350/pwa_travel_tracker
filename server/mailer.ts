@@ -21,19 +21,46 @@ export interface SendActivityAlertEmailParams {
   minutesRemaining?: number;
 }
 
-// ─── Default Credentials ───────────────────────────────────────────────────────
-const DEFAULT_SMTP_HOST = 'smtp.gmail.com';
-const DEFAULT_SMTP_PORT = 465;
-const DEFAULT_SMTP_USER = 'tstststststs55@gmail.com';
-const DEFAULT_SMTP_FROM = 'Travel Tracker PWA <tstststststs55@gmail.com>';
-const DEFAULT_SMTP_PASS = Buffer.from('YnJlemt0bWFkdm1xdmp3ZQ==', 'base64').toString('ascii');
+/**
+ * Parse automatique pour charger les variables SMTP depuis l'environnement Vercel :
+ * Supporte soit les variables individuelles (SMTP_USER, SMTP_PASS, etc.),
+ * soit le bloc complet regroupé dans une variable unique "mail" (comme configuré sur Vercel).
+ */
+function parseRawEnvString(raw?: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!raw) return result;
+
+  const knownKeys = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'];
+
+  for (const key of knownKeys) {
+    const regex = new RegExp(key + '\\s*=\\s*([^\\r\\n]+)', 'i');
+    const match = raw.match(regex);
+    if (match) {
+      let val = match[1].trim();
+      for (const otherKey of knownKeys) {
+        if (otherKey !== key) {
+          const nextIdx = val.indexOf(otherKey + '=');
+          if (nextIdx > 0) {
+            val = val.substring(0, nextIdx).trim();
+          }
+        }
+      }
+      result[key] = val;
+    }
+  }
+
+  return result;
+}
 
 function getSmtpConfig() {
-  const host = process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
-  const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : DEFAULT_SMTP_PORT;
-  const user = process.env.SMTP_USER || DEFAULT_SMTP_USER;
-  const pass = (process.env.SMTP_PASS || DEFAULT_SMTP_PASS).replace(/\s+/g, '');
-  const from = process.env.SMTP_FROM || DEFAULT_SMTP_FROM;
+  const parsedMail = parseRawEnvString(process.env.mail || process.env.MAIL);
+
+  const host = process.env.SMTP_HOST || parsedMail['SMTP_HOST'] || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || parsedMail['SMTP_PORT'] || '465', 10);
+  const user = process.env.SMTP_USER || parsedMail['SMTP_USER'] || '';
+  const pass = (process.env.SMTP_PASS || parsedMail['SMTP_PASS'] || '').replace(/\s+/g, '');
+  const from = process.env.SMTP_FROM || parsedMail['SMTP_FROM'] || (user ? `Travel Tracker PWA <${user}>` : 'Travel Tracker PWA <noreply@traveltracker.app>');
+
   return { host, port, user, pass, from };
 }
 
@@ -61,7 +88,6 @@ function createTransporter() {
       pass,
     },
     tls: {
-      // Accepte les certificats auto-signés sur les serveurs de dev
       rejectUnauthorized: false,
     },
   });
@@ -132,10 +158,9 @@ export async function sendPasswordResetEmail({
   `;
 
   if (!hasSmtpConfig()) {
-    console.log(`\n[EMAIL SIMULATION] Code OTP pour ${to} : ${code}\n`);
     return {
       sent: false,
-      message: `SMTP non configure. Configurez SMTP_HOST, SMTP_USER et SMTP_PASS dans les variables Vercel. Code : ${code}`,
+      message: 'SMTP non configuré dans les variables Vercel (SMTP_USER et SMTP_PASS requis).',
     };
   }
 
@@ -148,8 +173,8 @@ export async function sendPasswordResetEmail({
       text: `Bonjour, votre code de reinitialisation de mot de passe est : ${code} (valide 15 minutes).`,
       html,
     });
-    console.log(`[SMTP] Email OTP envoye a ${to}`);
-    return { sent: true, message: `Email envoye avec succes a ${to}` };
+    console.log(`[SMTP] Email OTP envoyé à ${to}`);
+    return { sent: true, message: `Email envoyé avec succès à ${to}` };
   } catch (err) {
     const msg = (err as Error).message;
     console.error('[SMTP Error]', msg);
@@ -226,8 +251,10 @@ export async function sendActivityAlertEmail({
   `;
 
   if (!hasSmtpConfig()) {
-    console.log(`[EMAIL SIMULATION] Alerte activite pour ${to} : "${activityTitle}" a ${startTime}`);
-    return { sent: false, message: 'SMTP non configure dans les variables Vercel.' };
+    return { 
+      sent: false, 
+      message: 'SMTP non configuré dans les variables Vercel (SMTP_USER et SMTP_PASS requis).' 
+    };
   }
 
   try {
@@ -239,8 +266,8 @@ export async function sendActivityAlertEmail({
       text: `Votre activite "${activityTitle}" commence a ${startTime} dans moins de ${minutesRemaining} minutes !`,
       html,
     });
-    console.log(`[SMTP] Alerte email envoyee a ${to}`);
-    return { sent: true, message: `Alerte email envoyee avec succes a ${to}` };
+    console.log(`[SMTP] Alerte email envoyée à ${to}`);
+    return { sent: true, message: `Alerte email envoyée avec succès à ${to}` };
   } catch (err) {
     const msg = (err as Error).message;
     console.error('[SMTP Alert Error]', msg);

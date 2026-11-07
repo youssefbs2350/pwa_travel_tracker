@@ -41896,17 +41896,35 @@ var nodemailer_default = nodemailer;
 // server/mailer.ts
 var import_dotenv2 = __toESM(require_dist4(), 1);
 import_dotenv2.default.config();
-var DEFAULT_SMTP_HOST = "smtp.gmail.com";
-var DEFAULT_SMTP_PORT = 465;
-var DEFAULT_SMTP_USER = "tstststststs55@gmail.com";
-var DEFAULT_SMTP_FROM = "Travel Tracker PWA <tstststststs55@gmail.com>";
-var DEFAULT_SMTP_PASS = Buffer.from("YnJlemt0bWFkdm1xdmp3ZQ==", "base64").toString("ascii");
+function parseRawEnvString(raw) {
+  const result = {};
+  if (!raw) return result;
+  const knownKeys = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_FROM"];
+  for (const key of knownKeys) {
+    const regex = new RegExp(key + "\\s*=\\s*([^\\r\\n]+)", "i");
+    const match = raw.match(regex);
+    if (match) {
+      let val = match[1].trim();
+      for (const otherKey of knownKeys) {
+        if (otherKey !== key) {
+          const nextIdx = val.indexOf(otherKey + "=");
+          if (nextIdx > 0) {
+            val = val.substring(0, nextIdx).trim();
+          }
+        }
+      }
+      result[key] = val;
+    }
+  }
+  return result;
+}
 function getSmtpConfig() {
-  const host = process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
-  const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : DEFAULT_SMTP_PORT;
-  const user = process.env.SMTP_USER || DEFAULT_SMTP_USER;
-  const pass = (process.env.SMTP_PASS || DEFAULT_SMTP_PASS).replace(/\s+/g, "");
-  const from = process.env.SMTP_FROM || DEFAULT_SMTP_FROM;
+  const parsedMail = parseRawEnvString(process.env.mail || process.env.MAIL);
+  const host = process.env.SMTP_HOST || parsedMail["SMTP_HOST"] || "smtp.gmail.com";
+  const port = parseInt(process.env.SMTP_PORT || parsedMail["SMTP_PORT"] || "465", 10);
+  const user = process.env.SMTP_USER || parsedMail["SMTP_USER"] || "";
+  const pass = (process.env.SMTP_PASS || parsedMail["SMTP_PASS"] || "").replace(/\s+/g, "");
+  const from = process.env.SMTP_FROM || parsedMail["SMTP_FROM"] || (user ? `Travel Tracker PWA <${user}>` : "Travel Tracker PWA <noreply@traveltracker.app>");
   return { host, port, user, pass, from };
 }
 function createTransporter() {
@@ -41930,7 +41948,6 @@ function createTransporter() {
       pass
     },
     tls: {
-      // Accepte les certificats auto-signés sur les serveurs de dev
       rejectUnauthorized: false
     }
   });
@@ -41996,12 +42013,9 @@ async function sendPasswordResetEmail({
     </div>
   `;
   if (!hasSmtpConfig()) {
-    console.log(`
-[EMAIL SIMULATION] Code OTP pour ${to} : ${code}
-`);
     return {
       sent: false,
-      message: `SMTP non configure. Configurez SMTP_HOST, SMTP_USER et SMTP_PASS dans les variables Vercel. Code : ${code}`
+      message: "SMTP non configur\xE9 dans les variables Vercel (SMTP_USER et SMTP_PASS requis)."
     };
   }
   try {
@@ -42013,8 +42027,8 @@ async function sendPasswordResetEmail({
       text: `Bonjour, votre code de reinitialisation de mot de passe est : ${code} (valide 15 minutes).`,
       html
     });
-    console.log(`[SMTP] Email OTP envoye a ${to}`);
-    return { sent: true, message: `Email envoye avec succes a ${to}` };
+    console.log(`[SMTP] Email OTP envoy\xE9 \xE0 ${to}`);
+    return { sent: true, message: `Email envoy\xE9 avec succ\xE8s \xE0 ${to}` };
   } catch (err) {
     const msg = err.message;
     console.error("[SMTP Error]", msg);
@@ -42084,8 +42098,10 @@ async function sendActivityAlertEmail({
     </div>
   `;
   if (!hasSmtpConfig()) {
-    console.log(`[EMAIL SIMULATION] Alerte activite pour ${to} : "${activityTitle}" a ${startTime}`);
-    return { sent: false, message: "SMTP non configure dans les variables Vercel." };
+    return {
+      sent: false,
+      message: "SMTP non configur\xE9 dans les variables Vercel (SMTP_USER et SMTP_PASS requis)."
+    };
   }
   try {
     const transporter = createTransporter();
@@ -42096,8 +42112,8 @@ async function sendActivityAlertEmail({
       text: `Votre activite "${activityTitle}" commence a ${startTime} dans moins de ${minutesRemaining} minutes !`,
       html
     });
-    console.log(`[SMTP] Alerte email envoyee a ${to}`);
-    return { sent: true, message: `Alerte email envoyee avec succes a ${to}` };
+    console.log(`[SMTP] Alerte email envoy\xE9e \xE0 ${to}`);
+    return { sent: true, message: `Alerte email envoy\xE9e avec succ\xE8s \xE0 ${to}` };
   } catch (err) {
     const msg = err.message;
     console.error("[SMTP Alert Error]", msg);
