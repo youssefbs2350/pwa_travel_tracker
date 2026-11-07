@@ -470,25 +470,53 @@ export const AuthScreen: React.FC = () => {
               ) : (
                 /* Step 2: Code + New Password */
                 <form onSubmit={handleResetSubmit} className="space-y-3.5">
-                  {/* Adresse email strictement en mode affichage / lecture seule non modifiable */}
-                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-                    <div className="flex items-center space-x-2.5 min-w-0 mr-2">
-                      <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 flex-shrink-0">
-                        <Mail className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-[10px] text-slate-400 block font-medium">Adresse email destinataire du code :</span>
-                        <span className="font-bold text-white truncate block">{email}</span>
+                  {/* Adresse email strictement visible en lecture seule / non modifiable */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-slate-300">
+                        Adresse Email du compte
+                      </label>
+                      <span className="text-[10px] font-semibold text-amber-400 flex items-center space-x-1 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+                        <Lock className="w-3 h-3" />
+                        <span>Lecture seule (non modifiable)</span>
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
+                      <input
+                        type="email"
+                        value={email}
+                        readOnly
+                        disabled
+                        tabIndex={-1}
+                        aria-readonly="true"
+                        className="w-full bg-slate-950/90 border border-slate-700/80 rounded-xl pl-9 pr-10 py-2.5 text-sm text-slate-300 font-medium cursor-not-allowed select-none opacity-85 shadow-inner"
+                        title="Cette adresse email ne peut pas être modifiée pendant la validation du code"
+                      />
+                      <div className="absolute right-3 top-2.5 text-amber-400 pointer-events-none" title="Champ verrouillé en lecture seule">
+                        <Lock className="w-4 h-4" />
                       </div>
                     </div>
-                    <span className="px-2.5 py-1 rounded-lg bg-slate-800 text-amber-300 border border-slate-700 flex items-center space-x-1 flex-shrink-0 text-[10px] font-semibold">
-                      <Lock className="w-3 h-3 text-amber-400" />
-                      <span>Mode affichage fixe</span>
-                    </span>
+                    <div className="flex items-center justify-between mt-1 text-[11px]">
+                      <span className="text-slate-400">
+                        Le code OTP a été envoyé à cette adresse.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResetStep(1);
+                          setResetCode('');
+                          resetMessages();
+                        }}
+                        className="text-amber-400 hover:text-amber-300 underline font-medium hover:opacity-90 transition-opacity"
+                      >
+                        Changer d'email
+                      </button>
+                    </div>
                   </div>
 
                   <div className="p-3 bg-brand-500/10 border border-brand-500/30 rounded-xl text-xs text-brand-300 flex items-start space-x-2.5">
-                    <Mail className="w-4 h-4 flex-shrink-0 text-brand-400 mt-0.5" />
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-brand-400 mt-0.5" />
                     <span className="leading-relaxed">
                       Un code de sécurité unique à 6 chiffres a été expédié à <strong>{email}</strong>. Seule la personne ayant accès à cette boîte de messagerie peut valider la réinitialisation.
                     </span>
