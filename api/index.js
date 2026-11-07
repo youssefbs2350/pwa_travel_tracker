@@ -41950,6 +41950,83 @@ async function sendPasswordResetEmail({ to, code, userName }) {
     message: `SMTP non configur\xE9 dans le serveur. Le code de v\xE9rification est ${code}`
   };
 }
+async function sendActivityAlertEmail({
+  to,
+  userName,
+  activityTitle,
+  startTime,
+  locationName,
+  locationAddress,
+  tripTitle,
+  minutesRemaining = 15
+}) {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpFrom = process.env.SMTP_FROM || '"Travel Tracker PWA" <support@traveltracker.app>';
+  const htmlContent = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; background-color: #0f172a; border-radius: 16px; overflow: hidden; border: 1px solid #1e293b; color: #f8fafc;">
+      <div style="background: linear-gradient(135deg, #0d9488, #0284c7); padding: 32px 24px; text-align: center;">
+        <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">\u{1F514} Rappel d'Activit\xE9 Imm\xE9diate</h1>
+        <p style="margin: 6px 0 0; color: rgba(255,255,255,0.9); font-size: 13px;">${tripTitle || "Votre Voyage Travel Tracker"}</p>
+      </div>
+      
+      <div style="padding: 32px 24px;">
+        <p style="font-size: 15px; color: #e2e8f0; margin-top: 0;">Bonjour ${userName || "Voyageur"},</p>
+        <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">
+          Votre prochaine \xE9tape commence dans <strong style="color: #38bdf8;">moins de ${minutesRemaining} minutes</strong> ! Pr\xE9parez-vous pour le d\xE9part :
+        </p>
+
+        <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin: 24px 0;">
+          <h2 style="font-size: 18px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0;">\u{1F4CD} ${activityTitle}</h2>
+          <div style="font-size: 14px; color: #38bdf8; font-weight: bold; margin-bottom: 8px;">
+            \u{1F552} Heure pr\xE9vue : ${startTime}
+          </div>
+          ${locationName ? `<div style="font-size: 13px; color: #cbd5e1; margin-bottom: 4px;">\u{1F3DB}\uFE0F <strong>Lieu :</strong> ${locationName}</div>` : ""}
+          ${locationAddress ? `<div style="font-size: 12px; color: #94a3b8;">\u{1F4CD} <strong>Adresse :</strong> ${locationAddress}</div>` : ""}
+        </div>
+
+        <p style="font-size: 12px; color: #64748b; line-height: 1.5;">
+          Ce rappel est envoy\xE9 automatiquement par votre assistant de planning Travel Tracker.
+        </p>
+      </div>
+
+      <div style="background-color: #090d16; padding: 16px 24px; border-top: 1px solid #1e293b; text-align: center; font-size: 11px; color: #475569;">
+        Travel Tracker PWA \u2022 Votre compagnon de voyage intelligent
+      </div>
+    </div>
+  `;
+  if (smtpHost && smtpUser && smtpPass) {
+    try {
+      const cleanedPass = smtpPass.replace(/\s+/g, "");
+      const isGmail = smtpHost.toLowerCase().includes("gmail");
+      const transporter = isGmail ? nodemailer_default.createTransport({
+        service: "gmail",
+        auth: { user: smtpUser, pass: cleanedPass }
+      }) : nodemailer_default.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: { user: smtpUser, pass: cleanedPass }
+      });
+      await transporter.sendMail({
+        from: smtpFrom,
+        to,
+        subject: `[Rappel Activit\xE9] \xAB ${activityTitle} \xBB commence dans ${minutesRemaining} min (${startTime}) !`,
+        text: `Bonjour, votre activit\xE9 \xAB ${activityTitle} \xBB commence \xE0 ${startTime} dans moins de ${minutesRemaining} minutes !`,
+        html: htmlContent
+      });
+      console.log(`[SMTP] E-mail d'alerte activit\xE9 envoy\xE9 \xE0 ${to}`);
+      return { sent: true, message: `E-mail d'alerte envoy\xE9 avec succ\xE8s \xE0 ${to}` };
+    } catch (err) {
+      console.error("[SMTP Alert Error]:", err.message);
+      return { sent: false, message: `Erreur d'envoi SMTP : ${err.message}` };
+    }
+  }
+  console.log(`[EMAIL SIMULATION] Alerte activit\xE9 pour ${to} : "${activityTitle}" \xE0 ${startTime}`);
+  return { sent: false, message: `Alerte simul\xE9e (SMTP non configur\xE9)` };
+}
 
 // server/routes/users.ts
 var router = (0, import_express.Router)();
@@ -42423,6 +42500,27 @@ router4.post("/optimize", async (req, res) => {
       message: "Planning optimis\xE9 sans aucun croisement d\u2019horaire !",
       activities: updated
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router4.post("/alert-email", async (req, res) => {
+  try {
+    const { to, userName, activityTitle, startTime, locationName, locationAddress, tripTitle, minutesRemaining } = req.body;
+    if (!to || !activityTitle || !startTime) {
+      return res.status(400).json({ error: "Champs obligatoires manquants (to, activityTitle, startTime)." });
+    }
+    const result = await sendActivityAlertEmail({
+      to,
+      userName,
+      activityTitle,
+      startTime,
+      locationName,
+      locationAddress,
+      tripTitle,
+      minutesRemaining: Number(minutesRemaining) || 15
+    });
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

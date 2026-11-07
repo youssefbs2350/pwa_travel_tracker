@@ -16,7 +16,7 @@ import {
   Sparkles,
   Lock
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+
 import { useTrips } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
 import { Complaint, ComplaintPriority, ComplaintStatus } from '../../types';
@@ -140,7 +140,7 @@ export const ComplaintsView: React.FC = () => {
       awardedCompensation: awardedCompensationInput || selectedComplaint?.awardedCompensation
     });
     if (newStatus === 'Résolu') {
-      confetti({ particleCount: 60, spread: 60 });
+
     }
     await loadComplaints();
     if (selectedComplaint && selectedComplaint.id === id) {

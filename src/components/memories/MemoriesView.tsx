@@ -22,7 +22,6 @@ import {
   AlertCircle,
   User
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { useTrips } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
 import { Memory, Review, Recommendation, Place, Trip } from '../../types';
@@ -207,7 +206,6 @@ export const MemoriesView: React.FC = () => {
     };
 
     await db.places.add(newPlace);
-    confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
     alert(`« ${rec.title} » a été ajouté à votre carte de voyage et liste de lieux !`);
     await loadData();
   };
@@ -249,7 +247,6 @@ export const MemoriesView: React.FC = () => {
     setMemPhotoPreview('');
     setMemLocation('');
     setSelectedMemoryPlaceId('');
-    confetti({ particleCount: 50, spread: 50 });
   };
 
   const handleCreateReview = async (e: React.FormEvent) => {
@@ -285,7 +282,6 @@ export const MemoriesView: React.FC = () => {
     await loadData();
     setIsReviewModalOpen(false);
     setRevComment('');
-    confetti({ particleCount: 60, spread: 50 });
   };
 
   const handleDeleteMemory = async (id: string) => {

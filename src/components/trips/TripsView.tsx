@@ -13,7 +13,6 @@ import {
   ArrowRight,
   PlaneTakeoff
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { useTrips } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
 import { Trip, TripStatus, Place, Activity, Expense } from '../../types';
@@ -314,7 +313,6 @@ export const TripsView: React.FC = () => {
         status,
         participants: participants.length > 0 ? participants : [currentUser?.name || 'Moi']
       });
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
     }
 
     setIsCreateModalOpen(false);
@@ -554,7 +552,6 @@ export const TripsView: React.FC = () => {
     setIsGenerating(false);
     setIsGeneratorModalOpen(false);
     setActiveTripId(newTrip.id);
-    confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 } });
   };
 
   const isPastTrip = (t: Trip) => t.status === 'Terminé' || new Date(t.endDate) < new Date();
@@ -569,9 +566,6 @@ export const TripsView: React.FC = () => {
   const handleToggleCompleted = async (trip: Trip) => {
     const newStatus: TripStatus = trip.status === 'Terminé' ? 'En cours' : 'Terminé';
     await updateTrip(trip.id, { status: newStatus });
-    if (newStatus === 'Terminé') {
-      confetti({ particleCount: 60, spread: 50 });
-    }
   };
 
   return (
@@ -953,7 +947,6 @@ export const TripsView: React.FC = () => {
                   if (destination.trim()) {
                     const aiCover = getDestinationCover(destination);
                     setCoverImage(aiCover);
-                    confetti({ particleCount: 30, spread: 40 });
                   } else {
                     alert("Veuillez d'abord saisir le nom d'une destination ou ville.");
                   }

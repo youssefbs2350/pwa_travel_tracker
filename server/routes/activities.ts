@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { ActivityModel } from '../models/Activity';
+import { sendActivityAlertEmail } from '../mailer';
 
 const router = Router();
 
@@ -124,6 +125,31 @@ router.post('/optimize', async (req: Request, res: Response) => {
       message: 'Planning optimisé sans aucun croisement d’horaire !', 
       activities: updated 
     });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /api/activities/alert-email (Notification intelligente par email pour activité imminente)
+router.post('/alert-email', async (req: Request, res: Response) => {
+  try {
+    const { to, userName, activityTitle, startTime, locationName, locationAddress, tripTitle, minutesRemaining } = req.body;
+    if (!to || !activityTitle || !startTime) {
+      return res.status(400).json({ error: 'Champs obligatoires manquants (to, activityTitle, startTime).' });
+    }
+
+    const result = await sendActivityAlertEmail({
+      to,
+      userName,
+      activityTitle,
+      startTime,
+      locationName,
+      locationAddress,
+      tripTitle,
+      minutesRemaining: Number(minutesRemaining) || 15
+    });
+
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

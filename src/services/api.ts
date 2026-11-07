@@ -314,6 +314,31 @@ export const api = {
         console.log('[API] Optimisation locale hors-ligne');
       }
       return [];
+    },
+
+    async sendAlertEmail(params: {
+      to: string;
+      userName?: string;
+      activityTitle: string;
+      startTime: string;
+      locationName?: string;
+      locationAddress?: string;
+      tripTitle?: string;
+      minutesRemaining?: number;
+    }): Promise<{ sent: boolean; message: string }> {
+      try {
+        const res = await fetch('/api/activities/alert-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(params)
+        });
+        if (res.ok) {
+          return await res.json();
+        }
+      } catch (err) {
+        console.warn('[API Alert Email Error]:', err);
+      }
+      return { sent: false, message: 'Alerte simulée (hors-ligne)' };
     }
   },
 

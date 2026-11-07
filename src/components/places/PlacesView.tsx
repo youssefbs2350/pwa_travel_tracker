@@ -21,7 +21,6 @@ import {
   AlertCircle,
   Sparkles
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { useTrips } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
 import { Place, PlaceCategory, Review } from '../../types';
@@ -119,7 +118,6 @@ export const PlacesView: React.FC = () => {
     await api.places.create(newPlace);
     setPlaces(prev => [...prev, newPlace]);
     setAddedSuggestions(prev => [...prev, sug.idKey]);
-    confetti({ particleCount: 60, spread: 50 });
 
     if (mapInstanceRef.current) {
       mapInstanceRef.current.flyTo([newPlace.latitude, newPlace.longitude], 14, { duration: 1.2 });
@@ -156,7 +154,6 @@ export const PlacesView: React.FC = () => {
     };
 
     await db.reviews.add(newRev);
-    confetti({ particleCount: 50, spread: 50 });
     alert(`Merci ! Votre avis certifié sur « ${placeForReview.name} » a été enregistré.`);
     setIsReviewModalOpen(false);
     setRevComment('');

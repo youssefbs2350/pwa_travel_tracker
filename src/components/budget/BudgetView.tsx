@@ -14,7 +14,7 @@ import {
   ShieldAlert,
   Sparkles
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+
 import { useTrips } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
 import { Expense, ExpenseCategory } from '../../types';
@@ -204,7 +204,7 @@ export const BudgetView: React.FC = () => {
 
     if (newExpenses.length > 0) {
       await db.expenses.bulkAdd(newExpenses);
-      confetti({ particleCount: 60, spread: 50 });
+
       alert(`${newExpenses.length} dépense(s) issue(s) du planning ont été synchronisées dans votre budget !`);
       await loadExpenses();
     } else {
