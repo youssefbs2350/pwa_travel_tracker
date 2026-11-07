@@ -70,6 +70,8 @@ export interface Activity {
   cost: number;
   status: ActivityStatus;
   orderIndex: number;
+  alertSent?: boolean;
+  alertSentAt?: string;
   createdAt: string;
 }
 

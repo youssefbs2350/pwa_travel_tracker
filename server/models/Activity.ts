@@ -13,6 +13,8 @@ export interface IActivity extends Document {
   cost: number;
   status: 'À faire' | 'En cours' | 'Terminé';
   orderIndex: number;
+  alertSent?: boolean;
+  alertSentAt?: string;
   createdAt: Date;
 }
 
@@ -29,6 +31,8 @@ const ActivitySchema = new Schema<IActivity>({
   cost: { type: Number, default: 0 },
   status: { type: String, enum: ['À faire', 'En cours', 'Terminé'], default: 'À faire' },
   orderIndex: { type: Number, default: 0 },
+  alertSent: { type: Boolean, default: false },
+  alertSentAt: { type: String, default: null },
   createdAt: { type: Date, default: Date.now }
 });
 

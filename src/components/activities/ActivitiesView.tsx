@@ -130,6 +130,13 @@ export const ActivitiesView: React.FC = () => {
     if (res.sent) {
       setAlertEmailStatus(`✓ Email automatique envoyé à ${targetEmail}`);
       alertedActivitiesRef.current.add(act.id);
+      // Verrouille en BDD pour garantir qu'elle ne peut plus être renvoyée
+      try {
+        await api.activities.update(act.id, { alertSent: true });
+        await loadData();
+      } catch (e) {
+        console.error('Error updating alertSent flag:', e);
+      }
       setToastMessage(`Alerte email envoyée automatiquement à ${targetEmail} (départ dans ${minutesLeft} min) !`);
     } else {
       setAlertEmailStatus(res.message || 'Alerte simulée');

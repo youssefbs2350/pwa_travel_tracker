@@ -20907,27 +20907,27 @@ var require_router = __commonJS({
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var methods = METHODS.map((method) => method.toLowerCase());
-    module.exports = Router9;
+    module.exports = Router10;
     module.exports.Route = Route;
-    function Router9(options) {
-      if (!(this instanceof Router9)) {
-        return new Router9(options);
+    function Router10(options) {
+      if (!(this instanceof Router10)) {
+        return new Router10(options);
       }
       const opts = options || {};
-      function router9(req, res, next) {
-        router9.handle(req, res, next);
+      function router10(req, res, next) {
+        router10.handle(req, res, next);
       }
-      Object.setPrototypeOf(router9, this);
-      router9.caseSensitive = opts.caseSensitive;
-      router9.mergeParams = opts.mergeParams;
-      router9.params = {};
-      router9.strict = opts.strict;
-      router9.stack = [];
-      return router9;
+      Object.setPrototypeOf(router10, this);
+      router10.caseSensitive = opts.caseSensitive;
+      router10.mergeParams = opts.mergeParams;
+      router10.params = {};
+      router10.strict = opts.strict;
+      router10.stack = [];
+      return router10;
     }
-    Router9.prototype = function() {
+    Router10.prototype = function() {
     };
-    Router9.prototype.param = function param(name2, fn) {
+    Router10.prototype.param = function param(name2, fn) {
       if (!name2) {
         throw new TypeError("argument name is required");
       }
@@ -20947,7 +20947,7 @@ var require_router = __commonJS({
       params.push(fn);
       return this;
     };
-    Router9.prototype.handle = function handle(req, res, callback) {
+    Router10.prototype.handle = function handle(req, res, callback) {
       if (!callback) {
         throw new TypeError("argument callback is required");
       }
@@ -21074,7 +21074,7 @@ var require_router = __commonJS({
         }
       }
     };
-    Router9.prototype.use = function use(handler) {
+    Router10.prototype.use = function use(handler) {
       let offset = 0;
       let path3 = "/";
       if (typeof handler !== "function") {
@@ -21107,7 +21107,7 @@ var require_router = __commonJS({
       }
       return this;
     };
-    Router9.prototype.route = function route(path3) {
+    Router10.prototype.route = function route(path3) {
       const route2 = new Route(path3);
       const layer = new Layer(path3, {
         sensitive: this.caseSensitive,
@@ -21122,7 +21122,7 @@ var require_router = __commonJS({
       return route2;
     };
     methods.concat("all").forEach(function(method) {
-      Router9.prototype[method] = function(path3) {
+      Router10.prototype[method] = function(path3) {
         const route = this.route(path3);
         route[method].apply(route, slice.call(arguments, 1));
         return this;
@@ -21305,13 +21305,13 @@ var require_application = __commonJS({
     var compileTrust = require_utils3().compileTrust;
     var resolve3 = __require("node:path").resolve;
     var once = require_once();
-    var Router9 = require_router();
+    var Router10 = require_router();
     var slice = Array.prototype.slice;
     var flatten = Array.prototype.flat;
     var app2 = exports = module.exports = {};
     var trustProxyDefaultSymbol = "@@symbol:trust_proxy_default";
     app2.init = function init() {
-      var router9 = null;
+      var router10 = null;
       this.cache = /* @__PURE__ */ Object.create(null);
       this.engines = /* @__PURE__ */ Object.create(null);
       this.settings = /* @__PURE__ */ Object.create(null);
@@ -21320,13 +21320,13 @@ var require_application = __commonJS({
         configurable: true,
         enumerable: true,
         get: function getrouter() {
-          if (router9 === null) {
-            router9 = new Router9({
+          if (router10 === null) {
+            router10 = new Router10({
               caseSensitive: this.enabled("case sensitive routing"),
               strict: this.enabled("strict routing")
             });
           }
-          return router9;
+          return router10;
         }
       });
     };
@@ -21397,15 +21397,15 @@ var require_application = __commonJS({
       if (fns.length === 0) {
         throw new TypeError("app.use() requires a middleware function");
       }
-      var router9 = this.router;
+      var router10 = this.router;
       fns.forEach(function(fn2) {
         if (!fn2 || !fn2.handle || !fn2.set) {
-          return router9.use(path3, fn2);
+          return router10.use(path3, fn2);
         }
         debug(".use app under %s", path3);
         fn2.mountpath = path3;
         fn2.parent = this;
-        router9.use(path3, function mounted_app(req, res, next) {
+        router10.use(path3, function mounted_app(req, res, next) {
           var orig = req.app;
           fn2.handle(req, res, function(err) {
             Object.setPrototypeOf(req, orig.request);
@@ -23994,7 +23994,7 @@ var require_express = __commonJS({
     var EventEmitter7 = __require("node:events").EventEmitter;
     var mixin = require_merge_descriptors();
     var proto = require_application();
-    var Router9 = require_router();
+    var Router10 = require_router();
     var req = require_request();
     var res = require_response();
     exports = module.exports = createApplication;
@@ -24016,8 +24016,8 @@ var require_express = __commonJS({
     exports.application = proto;
     exports.request = req;
     exports.response = res;
-    exports.Route = Router9.Route;
-    exports.Router = Router9;
+    exports.Route = Router10.Route;
+    exports.Router = Router10;
     exports.json = bodyParser.json;
     exports.raw = bodyParser.raw;
     exports.static = require_serve_static();
@@ -28518,7 +28518,7 @@ var require_jsonwebtoken = __commonJS({
 });
 
 // server/index.ts
-var import_express9 = __toESM(require_express2(), 1);
+var import_express10 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_dotenv3 = __toESM(require_dist4(), 1);
 import mongoose11 from "mongoose";
@@ -28640,6 +28640,8 @@ var ActivitySchema = new Schema4({
   cost: { type: Number, default: 0 },
   status: { type: String, enum: ["\xC0 faire", "En cours", "Termin\xE9"], default: "\xC0 faire" },
   orderIndex: { type: Number, default: 0 },
+  alertSent: { type: Boolean, default: false },
+  alertSentAt: { type: String, default: null },
   createdAt: { type: Date, default: Date.now }
 });
 var ActivityModel = mongoose5.models.Activity || mongoose5.model("Activity", ActivitySchema);
@@ -42871,13 +42873,106 @@ router8.post("/", async (req, res) => {
 });
 var sync_default = router8;
 
+// server/routes/cron.ts
+var import_express9 = __toESM(require_express2(), 1);
+
+// server/services/alertChecker.ts
+function timeToMinutes2(t) {
+  if (!t || !t.includes(":")) return 540;
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+async function checkAndSendDueActivityAlerts() {
+  await connectMongoDB();
+  const now = /* @__PURE__ */ new Date();
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const localMinutes = (now.getUTCHours() + 1) % 24 * 60 + now.getUTCMinutes();
+  const todayUtc = now.toISOString().split("T")[0];
+  const dLocal = new Date(now.getTime() + 36e5);
+  const todayLocal = dLocal.toISOString().split("T")[0];
+  const activities = await ActivityModel.find({
+    status: { $ne: "Termin\xE9" },
+    $or: [{ alertSent: false }, { alertSent: { $exists: false } }]
+  });
+  const details = [];
+  let alertedCount = 0;
+  for (const act of activities) {
+    const matchesDate = !act.date || act.date === todayUtc || act.date === todayLocal;
+    if (!matchesDate) continue;
+    const startMin = timeToMinutes2(act.startTime);
+    const diffLocal = startMin - localMinutes;
+    const diffUtc = startMin - utcMinutes;
+    const isDue = diffLocal > 0 && diffLocal <= 10 || diffUtc > 0 && diffUtc <= 10;
+    if (isDue) {
+      const minutesRemaining = diffLocal > 0 && diffLocal <= 10 ? diffLocal : diffUtc;
+      const trip = await TripModel.findOne({ id: act.tripId });
+      const place = act.placeId ? await PlaceModel.findOne({ id: act.placeId }) : null;
+      let recipientEmail = "youssefbs2350@gmail.com";
+      let recipientName = "Voyageur";
+      if (trip?.participants && trip.participants.length > 0) {
+        const foundUser = await UserModel.findOne({ name: trip.participants[0] });
+        if (foundUser?.email) {
+          recipientEmail = foundUser.email;
+          recipientName = foundUser.name;
+        }
+      }
+      if (!recipientEmail || recipientEmail === "noreply@traveltracker.app") {
+        const defaultUser = await UserModel.findOne({ email: "youssefbs2350@gmail.com" });
+        recipientEmail = defaultUser?.email || "youssefbs2350@gmail.com";
+      }
+      console.log(`[Auto-Alert Server] Envoi automatique pour "${act.title}" (${act.startTime}) \xE0 ${recipientEmail}`);
+      const result = await sendActivityAlertEmail({
+        to: recipientEmail,
+        userName: recipientName,
+        activityTitle: act.title,
+        startTime: act.startTime,
+        locationName: place?.name,
+        locationAddress: place?.address,
+        tripTitle: trip?.title || trip?.destination,
+        minutesRemaining
+      });
+      if (result.sent) {
+        act.alertSent = true;
+        act.alertSentAt = (/* @__PURE__ */ new Date()).toISOString();
+        await act.save();
+        alertedCount++;
+        details.push(`Alerte envoy\xE9e pour "${act.title}" (${act.startTime}) \xE0 ${recipientEmail}`);
+      } else {
+        details.push(`\xC9chec envoi "${act.title}": ${result.message}`);
+      }
+    }
+  }
+  return { checked: activities.length, alertedCount, details };
+}
+
+// server/routes/cron.ts
+var router9 = (0, import_express9.Router)();
+var handleCheckAlerts = async (_req, res) => {
+  try {
+    const result = await checkAndSendDueActivityAlerts();
+    res.json({
+      success: true,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      ...result
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+};
+router9.get("/check-alerts", handleCheckAlerts);
+router9.post("/check-alerts", handleCheckAlerts);
+var cron_default = router9;
+
 // server/index.ts
 import_dotenv3.default.config();
-var app = (0, import_express9.default)();
+var app = (0, import_express10.default)();
 var PORT = process.env.PORT || 5e3;
 app.use((0, import_cors.default)());
-app.use(import_express9.default.json({ limit: "50mb" }));
-app.use(import_express9.default.urlencoded({ limit: "50mb", extended: true }));
+app.use(import_express10.default.json({ limit: "50mb" }));
+app.use(import_express10.default.urlencoded({ limit: "50mb", extended: true }));
 app.use(async (req, res, next) => {
   try {
     await connectMongoDB();
@@ -42906,6 +43001,7 @@ app.use("/api/expenses", expenses_default);
 app.use("/api/memories", memories_default);
 app.use("/api/complaints", complaints_default);
 app.use("/api/sync", sync_default);
+app.use("/api/cron", cron_default);
 app.use("/users", users_default);
 app.use("/trips", trips_default);
 app.use("/places", places_default);
@@ -42914,6 +43010,12 @@ app.use("/expenses", expenses_default);
 app.use("/memories", memories_default);
 app.use("/complaints", complaints_default);
 app.use("/sync", sync_default);
+app.use("/cron", cron_default);
+setInterval(() => {
+  checkAndSendDueActivityAlerts().catch((err) => {
+    console.error("[Background Alert Checker Error]", err.message);
+  });
+}, 6e4);
 async function startServer() {
   const isConnected = await connectMongoDB();
   if (isConnected) {

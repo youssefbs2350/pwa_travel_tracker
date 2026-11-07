@@ -28,6 +28,13 @@ function AppContent() {
     initializeDatabase().then(() => {
       setIsDbReady(true);
     });
+
+    // Surveillance serveur en arrière-plan : vérifie et envoie les alertes d'activités (sans intervention utilisateur)
+    fetch('/api/cron/check-alerts').catch(() => {});
+    const timer = setInterval(() => {
+      fetch('/api/cron/check-alerts').catch(() => {});
+    }, 60000);
+    return () => clearInterval(timer);
   }, []);
 
   if (isAuthLoading || !isDbReady) {
