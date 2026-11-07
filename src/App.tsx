@@ -30,9 +30,9 @@ function AppContent() {
     });
 
     // Surveillance serveur en arrière-plan : vérifie et envoie les alertes d'activités (sans intervention utilisateur)
-    fetch('/api/cron/check-alerts').catch(() => {});
+    fetch('/api/activities/run-alerts').catch(() => {});
     const timer = setInterval(() => {
-      fetch('/api/cron/check-alerts').catch(() => {});
+      fetch('/api/activities/run-alerts').catch(() => {});
     }, 60000);
     return () => clearInterval(timer);
   }, []);

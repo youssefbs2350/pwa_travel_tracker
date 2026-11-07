@@ -42474,8 +42474,79 @@ var places_default = router3;
 // server/routes/activities.ts
 var import_express4 = __toESM(require_express2(), 1);
 import mongoose10 from "mongoose";
-var router4 = (0, import_express4.Router)();
+
+// server/services/alertChecker.ts
 function timeToMinutes(t) {
+  if (!t || !t.includes(":")) return 540;
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+async function checkAndSendDueActivityAlerts() {
+  await connectMongoDB();
+  const now = /* @__PURE__ */ new Date();
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const localMinutes = (now.getUTCHours() + 1) % 24 * 60 + now.getUTCMinutes();
+  const todayUtc = now.toISOString().split("T")[0];
+  const dLocal = new Date(now.getTime() + 36e5);
+  const todayLocal = dLocal.toISOString().split("T")[0];
+  const activities = await ActivityModel.find({
+    status: { $ne: "Termin\xE9" },
+    $or: [{ alertSent: false }, { alertSent: { $exists: false } }]
+  });
+  const details = [];
+  let alertedCount = 0;
+  for (const act of activities) {
+    const matchesDate = !act.date || act.date === todayUtc || act.date === todayLocal;
+    if (!matchesDate) continue;
+    const startMin = timeToMinutes(act.startTime);
+    const diffLocal = startMin - localMinutes;
+    const diffUtc = startMin - utcMinutes;
+    const isDue = diffLocal > 0 && diffLocal <= 10 || diffUtc > 0 && diffUtc <= 10;
+    if (isDue) {
+      const minutesRemaining = diffLocal > 0 && diffLocal <= 10 ? diffLocal : diffUtc;
+      const trip = await TripModel.findOne({ id: act.tripId });
+      const place = act.placeId ? await PlaceModel.findOne({ id: act.placeId }) : null;
+      let recipientEmail = "youssefbs2350@gmail.com";
+      let recipientName = "Voyageur";
+      if (trip?.participants && trip.participants.length > 0) {
+        const foundUser = await UserModel.findOne({ name: trip.participants[0] });
+        if (foundUser?.email) {
+          recipientEmail = foundUser.email;
+          recipientName = foundUser.name;
+        }
+      }
+      if (!recipientEmail || recipientEmail === "noreply@traveltracker.app") {
+        const defaultUser = await UserModel.findOne({ email: "youssefbs2350@gmail.com" });
+        recipientEmail = defaultUser?.email || "youssefbs2350@gmail.com";
+      }
+      console.log(`[Auto-Alert Server] Envoi automatique pour "${act.title}" (${act.startTime}) \xE0 ${recipientEmail}`);
+      const result = await sendActivityAlertEmail({
+        to: recipientEmail,
+        userName: recipientName,
+        activityTitle: act.title,
+        startTime: act.startTime,
+        locationName: place?.name,
+        locationAddress: place?.address,
+        tripTitle: trip?.title || trip?.destination,
+        minutesRemaining
+      });
+      if (result.sent) {
+        act.alertSent = true;
+        act.alertSentAt = (/* @__PURE__ */ new Date()).toISOString();
+        await act.save();
+        alertedCount++;
+        details.push(`Alerte envoy\xE9e pour "${act.title}" (${act.startTime}) \xE0 ${recipientEmail}`);
+      } else {
+        details.push(`\xC9chec envoi "${act.title}": ${result.message}`);
+      }
+    }
+  }
+  return { checked: activities.length, alertedCount, details };
+}
+
+// server/routes/activities.ts
+var router4 = (0, import_express4.Router)();
+function timeToMinutes2(t) {
   if (!t || !t.includes(":")) return 540;
   const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
@@ -42542,12 +42613,12 @@ router4.post("/optimize", async (req, res) => {
     if (acts.length === 0) {
       return res.json({ message: "Aucune activit\xE9 \xE0 optimiser pour ce jour.", activities: [] });
     }
-    acts.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+    acts.sort((a, b) => timeToMinutes2(a.startTime) - timeToMinutes2(b.startTime));
     let lastEndTimeMinutes = 0;
     for (let i = 0; i < acts.length; i++) {
       const act = acts[i];
-      let startMin = timeToMinutes(act.startTime);
-      let endMin = timeToMinutes(act.endTime);
+      let startMin = timeToMinutes2(act.startTime);
+      let endMin = timeToMinutes2(act.endTime);
       let duration = endMin - startMin;
       if (duration <= 0) duration = 90;
       if (i === 0) {
@@ -42569,13 +42640,26 @@ router4.post("/optimize", async (req, res) => {
       await act.save();
     }
     const updated = await ActivityModel.find({ tripId, dayNumber: dayNum });
-    updated.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+    updated.sort((a, b) => timeToMinutes2(a.startTime) - timeToMinutes2(b.startTime));
     res.json({
       message: "Planning optimis\xE9 sans aucun croisement d\u2019horaire !",
       activities: updated
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+router4.get("/run-alerts", async (_req, res) => {
+  try {
+    const result = await checkAndSendDueActivityAlerts();
+    res.json({
+      success: true,
+      service: "Auto Alert Cron Engine",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      ...result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 router4.post("/alert-email", async (req, res) => {
@@ -42875,77 +42959,6 @@ var sync_default = router8;
 
 // server/routes/cron.ts
 var import_express9 = __toESM(require_express2(), 1);
-
-// server/services/alertChecker.ts
-function timeToMinutes2(t) {
-  if (!t || !t.includes(":")) return 540;
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-async function checkAndSendDueActivityAlerts() {
-  await connectMongoDB();
-  const now = /* @__PURE__ */ new Date();
-  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const localMinutes = (now.getUTCHours() + 1) % 24 * 60 + now.getUTCMinutes();
-  const todayUtc = now.toISOString().split("T")[0];
-  const dLocal = new Date(now.getTime() + 36e5);
-  const todayLocal = dLocal.toISOString().split("T")[0];
-  const activities = await ActivityModel.find({
-    status: { $ne: "Termin\xE9" },
-    $or: [{ alertSent: false }, { alertSent: { $exists: false } }]
-  });
-  const details = [];
-  let alertedCount = 0;
-  for (const act of activities) {
-    const matchesDate = !act.date || act.date === todayUtc || act.date === todayLocal;
-    if (!matchesDate) continue;
-    const startMin = timeToMinutes2(act.startTime);
-    const diffLocal = startMin - localMinutes;
-    const diffUtc = startMin - utcMinutes;
-    const isDue = diffLocal > 0 && diffLocal <= 10 || diffUtc > 0 && diffUtc <= 10;
-    if (isDue) {
-      const minutesRemaining = diffLocal > 0 && diffLocal <= 10 ? diffLocal : diffUtc;
-      const trip = await TripModel.findOne({ id: act.tripId });
-      const place = act.placeId ? await PlaceModel.findOne({ id: act.placeId }) : null;
-      let recipientEmail = "youssefbs2350@gmail.com";
-      let recipientName = "Voyageur";
-      if (trip?.participants && trip.participants.length > 0) {
-        const foundUser = await UserModel.findOne({ name: trip.participants[0] });
-        if (foundUser?.email) {
-          recipientEmail = foundUser.email;
-          recipientName = foundUser.name;
-        }
-      }
-      if (!recipientEmail || recipientEmail === "noreply@traveltracker.app") {
-        const defaultUser = await UserModel.findOne({ email: "youssefbs2350@gmail.com" });
-        recipientEmail = defaultUser?.email || "youssefbs2350@gmail.com";
-      }
-      console.log(`[Auto-Alert Server] Envoi automatique pour "${act.title}" (${act.startTime}) \xE0 ${recipientEmail}`);
-      const result = await sendActivityAlertEmail({
-        to: recipientEmail,
-        userName: recipientName,
-        activityTitle: act.title,
-        startTime: act.startTime,
-        locationName: place?.name,
-        locationAddress: place?.address,
-        tripTitle: trip?.title || trip?.destination,
-        minutesRemaining
-      });
-      if (result.sent) {
-        act.alertSent = true;
-        act.alertSentAt = (/* @__PURE__ */ new Date()).toISOString();
-        await act.save();
-        alertedCount++;
-        details.push(`Alerte envoy\xE9e pour "${act.title}" (${act.startTime}) \xE0 ${recipientEmail}`);
-      } else {
-        details.push(`\xC9chec envoi "${act.title}": ${result.message}`);
-      }
-    }
-  }
-  return { checked: activities.length, alertedCount, details };
-}
-
-// server/routes/cron.ts
 var router9 = (0, import_express9.Router)();
 var handleCheckAlerts = async (_req, res) => {
   try {

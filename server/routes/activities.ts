@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { ActivityModel } from '../models/Activity';
 import { sendActivityAlertEmail } from '../mailer';
+import { checkAndSendDueActivityAlerts } from '../services/alertChecker';
 
 const router = Router();
 
@@ -127,6 +128,21 @@ router.post('/optimize', async (req: Request, res: Response) => {
     });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// GET /api/activities/run-alerts — Vérification autonome des alertes (appelé toutes les 60s par App.tsx)
+router.get('/run-alerts', async (_req: Request, res: Response) => {
+  try {
+    const result = await checkAndSendDueActivityAlerts();
+    res.json({
+      success: true,
+      service: 'Auto Alert Cron Engine',
+      timestamp: new Date().toISOString(),
+      ...result
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message });
   }
 });
 
