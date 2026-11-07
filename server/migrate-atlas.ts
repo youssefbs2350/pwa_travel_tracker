@@ -1,9 +1,16 @@
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 
-const LOCAL_URI = 'mongodb://127.0.0.1:27017/traveltracker';
-const ATLAS_URI = 'mongodb://youssefbs11_db_user:kc0DIrCVbznUYSEs@ac-k5tsgmk-shard-00-00.gogywt5.mongodb.net:27017,ac-k5tsgmk-shard-00-01.gogywt5.mongodb.net:27017,ac-k5tsgmk-shard-00-02.gogywt5.mongodb.net:27017/traveltracker?ssl=true&replicaSet=atlas-2gsdsc-shard-0&authSource=admin';
+dotenv.config();
+
+const LOCAL_URI = process.env.LOCAL_MONGO_URI || 'mongodb://127.0.0.1:27017/traveltracker';
+const ATLAS_URI = process.env.MONGO_URI;
 
 async function migrateAll() {
+  if (!ATLAS_URI) {
+    console.error('❌ MONGO_URI non définie dans les variables d\'environnement.');
+    process.exit(1);
+  }
   console.log('🔄 1/3 Connecting to Local MongoDB (localhost:27017)...');
   const local = await mongoose.createConnection(LOCAL_URI).asPromise();
   console.log('✅ Local connected!');
