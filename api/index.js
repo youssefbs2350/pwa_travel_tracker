@@ -28532,7 +28532,8 @@ async function connectMongoDB() {
   if (mongoose.connection.readyState === 1) {
     return true;
   }
-  const uri = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/traveltracker";
+  const ATLAS_FALLBACK_URI = "mongodb+srv://youssefbs11_db_user:kc0DIrCVbznUYSEs@gogywt5.mongodb.net/traveltracker?retryWrites=true&w=majority&authSource=admin";
+  const uri = process.env.MONGO_URI || ATLAS_FALLBACK_URI;
   try {
     if (!cachedPromise) {
       mongoose.set("strictQuery", false);
@@ -41890,28 +41891,38 @@ var nodemailer_default = nodemailer;
 // server/mailer.ts
 var import_dotenv2 = __toESM(require_dist4(), 1);
 import_dotenv2.default.config();
+var DEFAULT_SMTP_HOST = "smtp.gmail.com";
+var DEFAULT_SMTP_PORT = 465;
+var DEFAULT_SMTP_USER = "tstststststs55@gmail.com";
+var DEFAULT_SMTP_PASS = "brezktmadvmqvjwe";
+var DEFAULT_SMTP_FROM = "Travel Tracker PWA <tstststststs55@gmail.com>";
+function getSmtpConfig() {
+  const host = process.env.SMTP_HOST || DEFAULT_SMTP_HOST;
+  const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : DEFAULT_SMTP_PORT;
+  const user = process.env.SMTP_USER || DEFAULT_SMTP_USER;
+  const pass = (process.env.SMTP_PASS || DEFAULT_SMTP_PASS).replace(/\s+/g, "");
+  const from = process.env.SMTP_FROM || DEFAULT_SMTP_FROM;
+  return { host, port, user, pass, from };
+}
 function createTransporter() {
-  const smtpHost = process.env.SMTP_HOST || "";
-  const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
-  const smtpUser = process.env.SMTP_USER || "";
-  const smtpPass = (process.env.SMTP_PASS || "").replace(/\s+/g, "");
-  const isGmail = smtpHost.toLowerCase().includes("gmail");
+  const { host, port, user, pass } = getSmtpConfig();
+  const isGmail = host.toLowerCase().includes("gmail");
   if (isGmail) {
     return nodemailer_default.createTransport({
       service: "gmail",
       auth: {
-        user: smtpUser,
-        pass: smtpPass
+        user,
+        pass
       }
     });
   }
   return nodemailer_default.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465,
+    host,
+    port,
+    secure: port === 465,
     auth: {
-      user: smtpUser,
-      pass: smtpPass
+      user,
+      pass
     },
     tls: {
       // Accepte les certificats auto-signés sur les serveurs de dev
@@ -41920,10 +41931,12 @@ function createTransporter() {
   });
 }
 function hasSmtpConfig() {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  const { host, user, pass } = getSmtpConfig();
+  return !!(host && user && pass);
 }
 function getSmtpFrom() {
-  return process.env.SMTP_FROM || `"Travel Tracker PWA" <${process.env.SMTP_USER || "noreply@traveltracker.app"}>`;
+  const { from } = getSmtpConfig();
+  return from;
 }
 async function sendPasswordResetEmail({
   to,

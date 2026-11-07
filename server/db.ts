@@ -10,7 +10,8 @@ export async function connectMongoDB(): Promise<boolean> {
     return true;
   }
 
-  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/traveltracker';
+  const ATLAS_FALLBACK_URI = 'mongodb+srv://youssefbs11_db_user:kc0DIrCVbznUYSEs@gogywt5.mongodb.net/traveltracker?retryWrites=true&w=majority&authSource=admin';
+  const uri = process.env.MONGO_URI || ATLAS_FALLBACK_URI;
 
   try {
     if (!cachedPromise) {
