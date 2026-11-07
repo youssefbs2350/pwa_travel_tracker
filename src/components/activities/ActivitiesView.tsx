@@ -697,7 +697,12 @@ export const ActivitiesView: React.FC = () => {
   const todayDateStr = currentTime.toISOString().split('T')[0];
   const currentTripDay = getCurrentDayOfTrip();
 
-  // Activités prévues AUJOURD'HUI sur l'ensemble du séjour (peu importe l'onglet sélectionné)
+  // Position temporelle du jour sélectionné
+  const isSelectedDayPast = selectedDay < currentTripDay;
+  const isSelectedDayToday = selectedDay === currentTripDay;
+  const isSelectedDayFuture = selectedDay > currentTripDay;
+
+  // Activités prévues AUJOURD'HUI sur l'ensemble du séjour (date réelle d'aujourd'hui)
   const todayTripActivities = activities.filter(act => {
     if (act.date) {
       return act.date.split('T')[0] === todayDateStr;
@@ -705,34 +710,48 @@ export const ActivitiesView: React.FC = () => {
     return act.dayNumber === currentTripDay;
   }).sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
-  // Activités pour le live : priorité aux activités réelles d'aujourd'hui sur tout le séjour
-  const liveMonitoringActivities = todayTripActivities.length > 0 ? todayTripActivities : currentDayActivities;
-  const liveDayNumber = todayTripActivities.length > 0 ? (todayTripActivities[0]?.dayNumber || currentTripDay) : selectedDay;
-
-  const ongoingActivity = liveMonitoringActivities.find(act => {
-    const s = timeToMinutes(act.startTime);
-    const e = timeToMinutes(act.endTime);
-    return nowMin >= s && nowMin < e;
-  });
-
-  const upcomingActivities = liveMonitoringActivities
+  // Détection de la prochaine activité d'aujourd'hui pour l'alerte email automatique
+  const todayUpcoming = todayTripActivities
     .filter(act => timeToMinutes(act.startTime) > nowMin && act.status !== 'Terminé')
     .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
-  const nextUpcomingActivity = upcomingActivities[0] || null;
-  const minUntilNext = nextUpcomingActivity ? timeToMinutes(nextUpcomingActivity.startTime) - nowMin : null;
-  const isNextImminent = minUntilNext !== null && minUntilNext > 0 && minUntilNext <= 10;
+  const todayNextActivity = todayUpcoming[0] || null;
+  const todayMinUntilNext = todayNextActivity ? timeToMinutes(todayNextActivity.startTime) - nowMin : null;
+  const isTodayImminent = todayMinUntilNext !== null && todayMinUntilNext > 0 && todayMinUntilNext <= 10;
 
-  // Effet d'alerte automatique par email à 10 minutes du départ de chaque activité (sans bouton manuel)
+  // Effet d'alerte automatique par email à 10 minutes du départ (exclusivement pour les activités d'aujourd'hui)
   useEffect(() => {
-    if (!nextUpcomingActivity || minUntilNext === null) return;
-    if (minUntilNext > 0 && minUntilNext <= 10) {
-      if (!alertedActivitiesRef.current.has(nextUpcomingActivity.id)) {
-        alertedActivitiesRef.current.add(nextUpcomingActivity.id);
-        handleSendAlertEmail(nextUpcomingActivity, minUntilNext);
+    if (!todayNextActivity || todayMinUntilNext === null) return;
+    if (todayMinUntilNext > 0 && todayMinUntilNext <= 10) {
+      if (!alertedActivitiesRef.current.has(todayNextActivity.id)) {
+        alertedActivitiesRef.current.add(todayNextActivity.id);
+        handleSendAlertEmail(todayNextActivity, todayMinUntilNext);
       }
     }
-  }, [minUntilNext, nextUpcomingActivity?.id]);
+  }, [todayMinUntilNext, todayNextActivity?.id]);
+
+  // Activités analysées pour le widget selon la journée sélectionnée
+  const ongoingActivity = isSelectedDayToday
+    ? currentDayActivities.find(act => {
+        const s = timeToMinutes(act.startTime);
+        const e = timeToMinutes(act.endTime);
+        return nowMin >= s && nowMin < e;
+      })
+    : null;
+
+  const nextUpcomingActivity = isSelectedDayToday
+    ? currentDayActivities
+        .filter(act => timeToMinutes(act.startTime) > nowMin && act.status !== 'Terminé')
+        .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))[0] || null
+    : isSelectedDayFuture
+    ? currentDayActivities[0] || null
+    : null;
+
+  const minUntilNext = (isSelectedDayToday && nextUpcomingActivity)
+    ? timeToMinutes(nextUpcomingActivity.startTime) - nowMin
+    : null;
+
+  const isNextImminent = isSelectedDayToday && minUntilNext !== null && minUntilNext > 0 && minUntilNext <= 10;
 
   return (
     <div className="space-y-6">
@@ -822,7 +841,15 @@ export const ActivitiesView: React.FC = () => {
                   <Clock className="w-3.5 h-3.5 text-teal-400" />
                   <span>Heure système : <strong className="text-white font-mono">{timeFormatted}</strong></span>
                   <span>•</span>
-                  <span>Jour {liveDayNumber} ({activeTrip.title || activeTrip.destination})</span>
+                  <span>
+                    {isSelectedDayToday ? (
+                      <span className="text-teal-300 font-semibold">Jour {selectedDay} (Aujourd'hui)</span>
+                    ) : isSelectedDayPast ? (
+                      <span className="text-slate-400">Jour {selectedDay} (Passé)</span>
+                    ) : (
+                      <span className="text-indigo-300">Jour {selectedDay} (À venir)</span>
+                    )} • {activeTrip.title || activeTrip.destination}
+                  </span>
                 </div>
               </div>
             </div>
@@ -837,177 +864,186 @@ export const ActivitiesView: React.FC = () => {
             </div>
           </div>
 
-          {/* Section A : ALERTE DÉPART IMMINENT (≤ 10 min) */}
-          {isNextImminent && nextUpcomingActivity && (
-            <div className="p-4 rounded-xl bg-gradient-to-r from-rose-950/80 via-amber-950/60 to-rose-950/80 border-2 border-rose-500/70 shadow-lg shadow-rose-950/50 space-y-3 animate-pulse">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-rose-500 text-slate-950 rounded-xl">
-                    <BellRing className="w-5 h-5 animate-bounce" />
-                  </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs uppercase font-extrabold tracking-wider text-rose-300">
-                        Alerte Départ Imminent (≤ 10 min)
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-rose-500 text-slate-950 text-xs font-black">
-                        Dans {minUntilNext} min !
-                      </span>
-                    </div>
-                    <h4 className="text-base font-bold text-white mt-0.5">
-                      « {nextUpcomingActivity.title} » (Jour {nextUpcomingActivity.dayNumber || liveDayNumber}) débute à {nextUpcomingActivity.startTime}
-                    </h4>
-                  </div>
-                </div>
-
-                {/* Badge statut automatique (aucun bouton manuel) */}
-                <div className="flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900/90 border border-rose-500/30 text-rose-200 self-start sm:self-auto shadow-sm">
-                  {isSendingAlertEmail ? (
-                    <>
-                      <Clock className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                      <span>Envoi email automatique...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>{alertEmailStatus || `Alerte email envoyée automatiquement`}</span>
-                    </>
-                  )}
-                </div>
+          {/* Rappel compact si alerte imminente sur le jour réel pendant la consultation d'un autre jour */}
+          {!isSelectedDayToday && isTodayImminent && todayNextActivity && (
+            <div className="p-3.5 rounded-xl bg-gradient-to-r from-rose-950/90 via-amber-950/80 to-rose-950/90 border border-rose-500/60 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-pulse">
+              <div className="flex items-center space-x-2">
+                <BellRing className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                <span className="text-rose-200">
+                  <strong>Alerte en direct Aujourd'hui (Jour {currentTripDay}) :</strong> « {todayNextActivity.title} » débute dans <strong>{todayMinUntilNext} min</strong> ({todayNextActivity.startTime}) !
+                </span>
               </div>
-
-              {/* Détails du lieu et météo pour l'activité imminente */}
-              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-rose-500/20 text-xs">
-                {places.find(p => p.id === nextUpcomingActivity.placeId) && (
-                  <span className="text-rose-200 flex items-center space-x-1">
-                    <MapPin className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Lieu : <strong>{places.find(p => p.id === nextUpcomingActivity.placeId)?.name}</strong></span>
-                  </span>
-                )}
-                {activityWeatherMap[nextUpcomingActivity.id] && (
-                  <span className="text-amber-200 flex items-center space-x-1">
-                    <Thermometer className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Météo : {activityWeatherMap[nextUpcomingActivity.id].emoji} {activityWeatherMap[nextUpcomingActivity.id].temperature}°C ({activityWeatherMap[nextUpcomingActivity.id].label})</span>
-                  </span>
-                )}
-              </div>
+              <button
+                onClick={() => setSelectedDay(currentTripDay)}
+                className="px-2.5 py-1 bg-rose-500 text-slate-950 text-xs font-bold rounded-lg self-start sm:self-auto hover:bg-rose-400 transition-colors"
+              >
+                Voir Aujourd'hui
+              </button>
             </div>
           )}
 
-          {/* Section B : ACTIVITÉ EN COURS */}
-          {ongoingActivity ? (
-            <div className="p-4 rounded-xl bg-slate-950/70 border border-teal-500/40 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center space-x-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-ping" />
-                  <span className="text-xs uppercase font-extrabold tracking-wider text-teal-300">
-                    Activité en cours actuellement
-                  </span>
-                  <span className="text-xs font-mono font-bold text-slate-400">
-                    ({ongoingActivity.startTime} → {ongoingActivity.endTime})
-                  </span>
+          {/* Affichage différencié selon le jour consulté : Passé / Futur / Aujourd'hui */}
+          {isSelectedDayPast ? (
+            <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 </div>
-
+                <div>
+                  <span className="font-bold text-white">Jour {selectedDay} terminé (Journée passée)</span>
+                  <p className="text-slate-400 text-[11px] mt-0.5">Toutes les étapes de cette journée sont achevées.</p>
+                </div>
+              </div>
+              {currentTripDay !== selectedDay && (
                 <button
-                  onClick={() => handleToggleStatus(ongoingActivity)}
-                  className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-teal-500/20 text-teal-300 hover:bg-teal-500/30 border border-teal-500/30 transition-colors self-start sm:self-auto"
+                  onClick={() => setSelectedDay(currentTripDay)}
+                  className="px-3 py-1.5 bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors self-start sm:self-auto"
                 >
-                  <CheckCircle className="w-3.5 h-3.5 text-teal-400" />
-                  <span>Marquer terminée</span>
+                  <span>Aller à Aujourd'hui (Jour {currentTripDay})</span>
+                  <ArrowRight className="w-3 h-3" />
                 </button>
-              </div>
-
-              <div>
-                <h4 className="text-base font-bold text-white">{ongoingActivity.title}</h4>
-                {ongoingActivity.description && (
-                  <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{ongoingActivity.description}</p>
-                )}
-              </div>
-
-              {/* Progress bar de l'activité en cours */}
-              {(() => {
-                const startM = timeToMinutes(ongoingActivity.startTime);
-                const endM = timeToMinutes(ongoingActivity.endTime);
-                const durationM = Math.max(1, endM - startM);
-                const elapsedM = Math.max(0, Math.min(durationM, nowMin - startM));
-                const remainingM = Math.max(0, endM - nowMin);
-                const pct = Math.round((elapsedM / durationM) * 100);
-
-                return (
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-400">
-                        Écoulé : <strong className="text-teal-300">{elapsedM} min</strong> ({pct}%)
-                      </span>
-                      <span className="text-slate-300 font-semibold">
-                        Reste : <strong className="text-white">{remainingM} min</strong>
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                      <div
-                        className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-all duration-300"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Badges lieu + météo pour l'activité en cours */}
-              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/80 text-xs">
-                {places.find(p => p.id === ongoingActivity.placeId) && (
-                  <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${places.find(p => p.id === ongoingActivity.placeId)?.latitude},${places.find(p => p.id === ongoingActivity.placeId)?.longitude}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-1.5 text-emerald-300 hover:underline"
-                  >
-                    <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{places.find(p => p.id === ongoingActivity.placeId)?.name}</span>
-                  </a>
-                )}
-                {activityWeatherMap[ongoingActivity.id] && (
-                  <div className="inline-flex items-center space-x-1 text-amber-300">
-                    <Thermometer className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{activityWeatherMap[ongoingActivity.id].emoji} {activityWeatherMap[ongoingActivity.id].temperature}°C ({activityWeatherMap[ongoingActivity.id].label})</span>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
-          ) : nextUpcomingActivity && !isNextImminent ? (
-            /* Section C : Pas d'activité en cours, mais prochaine étape planifiée plus tard */
-            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="space-y-1">
-                <div className="flex items-center space-x-2">
-                  <span className="text-slate-400 font-medium">Prochaine étape aujourd'hui :</span>
-                  <span className="font-bold text-white">« {nextUpcomingActivity.title} »</span>
+          ) : isSelectedDayFuture ? (
+            <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
+                  <CalendarDays className="w-4 h-4" />
                 </div>
-                <div className="flex items-center space-x-2 text-slate-400">
-                  <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>
-                    Prévue à <strong className="text-teal-300">{nextUpcomingActivity.startTime}</strong> (dans {Math.floor((minUntilNext || 0) / 60) > 0 ? `${Math.floor((minUntilNext || 0) / 60)}h ` : ''}{(minUntilNext || 0) % 60} min)
-                  </span>
-                  {activityWeatherMap[nextUpcomingActivity.id] && (
-                    <>
-                      <span>•</span>
-                      <span>Météo : {activityWeatherMap[nextUpcomingActivity.id].emoji} {activityWeatherMap[nextUpcomingActivity.id].temperature}°C</span>
-                    </>
-                  )}
+                <div>
+                  <span className="font-bold text-white">Jour {selectedDay} à venir</span>
+                  <p className="text-slate-400 text-[11px] mt-0.5">{currentDayActivities.length} activité(s) planifiée(s) pour cette journée.</p>
                 </div>
               </div>
+              {currentTripDay !== selectedDay && (
+                <button
+                  onClick={() => setSelectedDay(currentTripDay)}
+                  className="px-3 py-1.5 bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors self-start sm:self-auto"
+                >
+                  <span>Revenir à Aujourd'hui (Jour {currentTripDay})</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Section A : ALERTE DÉPART IMMINENT (≤ 10 min) */}
+              {isNextImminent && nextUpcomingActivity && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-rose-950/80 via-amber-950/60 to-rose-950/80 border-2 border-rose-500/70 shadow-lg shadow-rose-950/50 space-y-3 animate-pulse">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-rose-500 text-slate-950 rounded-xl">
+                        <BellRing className="w-5 h-5 animate-bounce" />
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs uppercase font-extrabold tracking-wider text-rose-300">
+                            Alerte Départ Imminent (≤ 10 min)
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-rose-500 text-slate-950 text-xs font-black">
+                            Dans {minUntilNext} min !
+                          </span>
+                        </div>
+                        <h4 className="text-base font-bold text-white mt-0.5">
+                          « {nextUpcomingActivity.title} » débute à {nextUpcomingActivity.startTime}
+                        </h4>
+                      </div>
+                    </div>
 
-              <div className="flex items-center space-x-1.5 text-[11px] text-teal-400 bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800 self-start sm:self-auto">
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
-                <span>Alerte email automatique déclenchée à 10 min</span>
-              </div>
-            </div>
-          ) : currentDayActivities.length > 0 && !ongoingActivity && !nextUpcomingActivity ? (
-            /* Section D : Toutes les activités du jour sont passées */
-            <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 text-xs text-slate-400 flex items-center space-x-2">
-              <CheckCircle2 className="w-4 h-4 text-teal-400" />
-              <span>Toutes les activités prévues pour le Jour {selectedDay} sont achevées pour aujourd'hui !</span>
-            </div>
-          ) : null}
+                    {/* Badge statut automatique (aucun bouton manuel) */}
+                    <div className="flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900/90 border border-rose-500/30 text-rose-200 self-start sm:self-auto shadow-sm">
+                      {isSendingAlertEmail ? (
+                        <>
+                          <Clock className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                          <span>Envoi email automatique...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>{alertEmailStatus || `Alerte email envoyée automatiquement`}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Détails du lieu et météo pour l'activité imminente */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-rose-500/20 text-xs">
+                    {places.find(p => p.id === nextUpcomingActivity.placeId) && (
+                      <span className="text-rose-200 flex items-center space-x-1">
+                        <MapPin className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Lieu : <strong>{places.find(p => p.id === nextUpcomingActivity.placeId)?.name}</strong></span>
+                      </span>
+                    )}
+                    {activityWeatherMap[nextUpcomingActivity.id] && (
+                      <span className="text-amber-200 flex items-center space-x-1">
+                        <Thermometer className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Météo : {activityWeatherMap[nextUpcomingActivity.id].emoji} {activityWeatherMap[nextUpcomingActivity.id].temperature}°C ({activityWeatherMap[nextUpcomingActivity.id].label})</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Section B : ACTIVITÉ EN COURS */}
+              {ongoingActivity ? (
+                <div className="p-4 rounded-xl bg-slate-950/70 border border-teal-500/40 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-ping" />
+                      <span className="text-xs uppercase font-extrabold tracking-wider text-teal-300">
+                        Activité en cours actuellement
+                      </span>
+                      <span className="text-xs font-mono font-bold text-slate-400">
+                        ({ongoingActivity.startTime} → {ongoingActivity.endTime})
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => handleToggleStatus(ongoingActivity)}
+                      className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-teal-500/20 text-teal-300 hover:bg-teal-500/30 border border-teal-500/30 transition-colors self-start sm:self-auto"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5 text-teal-400" />
+                      <span>Marquer terminée</span>
+                    </button>
+                  </div>
+
+                  <div>
+                    <h4 className="text-base font-bold text-white">« {ongoingActivity.title} »</h4>
+                    {ongoingActivity.description && (
+                      <p className="text-xs text-slate-300 mt-1">{ongoingActivity.description}</p>
+                    )}
+                  </div>
+                </div>
+              ) : nextUpcomingActivity && !isNextImminent ? (
+                /* Section C : Pas d'activité en cours, mais prochaine étape planifiée plus tard */
+                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-slate-400 font-medium">Prochaine étape aujourd'hui :</span>
+                      <span className="font-bold text-white">« {nextUpcomingActivity.title} »</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-slate-400">
+                      <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>
+                        Prévue à <strong className="text-teal-300">{nextUpcomingActivity.startTime}</strong> (dans {Math.floor((minUntilNext || 0) / 60) > 0 ? `${Math.floor((minUntilNext || 0) / 60)}h ` : ''}{(minUntilNext || 0) % 60} min)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-1.5 text-[11px] text-teal-400 bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800 self-start sm:self-auto">
+                    <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
+                    <span>Alerte email automatique déclenchée à 10 min</span>
+                  </div>
+                </div>
+              ) : currentDayActivities.length > 0 && !ongoingActivity && !nextUpcomingActivity ? (
+                /* Section D : Toutes les activités du jour sont passées */
+                <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 text-xs text-slate-400 flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-teal-400" />
+                  <span>Toutes les activités prévues pour le Jour {selectedDay} sont achevées pour aujourd'hui !</span>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
       )}
 
@@ -1016,17 +1052,36 @@ export const ActivitiesView: React.FC = () => {
         {days.map(d => {
           const actsForD = activities.filter(a => a.dayNumber === d);
           const hasConflict = getConflicts(d).length > 0;
+          const isDayToday = d === currentTripDay;
+          const isDayPast = d < currentTripDay;
+
           return (
             <button
               key={d}
               onClick={() => setSelectedDay(d)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex-shrink-0 transition-all border flex items-center space-x-2 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold flex-shrink-0 transition-all border flex items-center space-x-2 ${
                 selectedDay === d
                   ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-md shadow-teal-500/20'
+                  : isDayToday
+                  ? 'bg-teal-950/60 text-teal-300 border-teal-500/50 hover:bg-teal-900/50'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
               }`}
             >
               <span>Jour {d}</span>
+              {isDayToday && (
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider ${
+                  selectedDay === d ? 'bg-slate-950 text-teal-300' : 'bg-teal-400 text-slate-950'
+                }`}>
+                  Aujourd'hui
+                </span>
+              )}
+              {isDayPast && (
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+                  selectedDay === d ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                }`}>
+                  ✓ Fait
+                </span>
+              )}
               <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                 selectedDay === d ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
               }`}>
@@ -1201,6 +1256,7 @@ export const ActivitiesView: React.FC = () => {
             const linkedPlace = places.find(p => p.id === act.placeId);
             const hasConflict = dayConflicts.some(c => c.id1 === act.id || c.id2 === act.id);
             const weather = activityWeatherMap[act.id];
+            const isActivityDone = isSelectedDayPast || act.status === 'Terminé';
 
             return (
               <div
@@ -1208,7 +1264,7 @@ export const ActivitiesView: React.FC = () => {
                 className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl border transition-all gap-4 ${
                   hasConflict
                     ? 'bg-rose-950/30 border-rose-500/60 ring-1 ring-rose-500/40'
-                    : act.status === 'Terminé'
+                    : isActivityDone
                     ? 'bg-slate-900/50 border-slate-800/80 opacity-75'
                     : act.status === 'En cours'
                     ? 'bg-teal-950/30 border-teal-500/40 shadow-md ring-1 ring-teal-500/30'
@@ -1220,10 +1276,10 @@ export const ActivitiesView: React.FC = () => {
                   <button
                     onClick={() => handleToggleStatus(act)}
                     className="p-1 rounded-lg text-slate-400 hover:text-teal-400 transition-colors"
-                    title={`Statut actuel : ${act.status} (Cliquer pour changer)`}
+                    title={`Statut : ${isActivityDone ? 'Terminé (Passé)' : act.status} (Cliquer pour basculer)`}
                   >
-                    {act.status === 'Terminé' ? (
-                      <CheckCircle2 className="w-5 h-5 text-teal-400 fill-teal-400/20" />
+                    {isActivityDone ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/20" />
                     ) : act.status === 'En cours' ? (
                       <Clock className="w-5 h-5 text-amber-400 animate-spin" />
                     ) : (
@@ -1232,7 +1288,7 @@ export const ActivitiesView: React.FC = () => {
                   </button>
 
                   <div className="flex flex-col">
-                    <span className={`text-xs font-mono font-bold ${hasConflict ? 'text-rose-400 underline decoration-rose-500' : 'text-teal-300'}`}>
+                    <span className={`text-xs font-mono font-bold ${hasConflict ? 'text-rose-400 underline decoration-rose-500' : isActivityDone ? 'text-slate-400' : 'text-teal-300'}`}>
                       {act.startTime} - {act.endTime}
                     </span>
                     <span className="text-[10px] text-slate-500">Étape #{index + 1}</span>
@@ -1243,18 +1299,18 @@ export const ActivitiesView: React.FC = () => {
                 <div className="flex-1 space-y-1.5">
                   <div className="flex items-center space-x-2">
                     <h4 className={`text-sm font-bold ${
-                      act.status === 'Terminé' ? 'line-through text-slate-400' : 'text-white'
+                      isActivityDone ? 'line-through text-slate-400' : 'text-white'
                     }`}>
                       {act.title}
                     </h4>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                      act.status === 'Terminé'
+                      isActivityDone
                         ? 'bg-emerald-500/20 text-emerald-300'
                         : act.status === 'En cours'
                         ? 'bg-amber-500/20 text-amber-300'
                         : 'bg-slate-800 text-slate-400'
                     }`}>
-                      {act.status}
+                      {isSelectedDayPast ? 'Passé (Done)' : act.status}
                     </span>
                     {hasConflict && (
                       <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full font-bold">

@@ -7,10 +7,13 @@ import {
   ChevronDown, 
   Plus, 
   Lock, 
-  UserCheck 
+  UserCheck,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrips } from '../../context/TripContext';
+import { useOffline } from '../../context/OfflineContext';
+import { PwaInstallModal } from './PwaInstallModal';
 import { UserRole } from '../../types';
 
 interface NavbarProps {
@@ -21,9 +24,22 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ onOpenNewTripModal, onNavigateTab }) => {
   const { currentUser, isAdmin, updateUserRole, allUsers, switchUser, logout } = useAuth();
   const { trips, activeTrip, setActiveTripId } = useTrips();
+  const { canInstall, isInstalled, promptInstall } = useOffline();
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showTripDropdown, setShowTripDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+
+  const handleInstallClick = async () => {
+    if (canInstall) {
+      const res = await promptInstall();
+      if (!res) {
+        setShowInstallModal(true);
+      }
+    } else {
+      setShowInstallModal(true);
+    }
+  };
 
   const roles: UserRole[] = ['Traveler', 'Organizer', 'Admin'];
 
@@ -130,6 +146,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenNewTripModal, onNavigateTa
             {/* Right Controls: Offline toggle, PWA Install, Role Badge (Admin-only modification), User Profile */}
             <div className="flex items-center space-x-2 sm:space-x-3">
               
+              {/* PWA Install Button: Visible quand l'app n'est pas encore en mode standalone */}
+              {!isInstalled && (
+                <button
+                  onClick={handleInstallClick}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-teal-500/20 transition-all transform hover:-translate-y-0.5"
+                  title="Installer l'application sur votre téléphone (WebAPK)"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Installer l'App</span>
+                  <span className="sm:hidden">Installer</span>
+                </button>
+              )}
+
               {/* Role Badge: STRICT ADMIN PERMISSION */}
               {isAdmin ? (
                 <div className="relative">
@@ -246,6 +275,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenNewTripModal, onNavigateTa
         </div>
       </header>
 
+      <PwaInstallModal 
+        isOpen={showInstallModal} 
+        onClose={() => setShowInstallModal(false)} 
+      />
     </>
   );
 };
