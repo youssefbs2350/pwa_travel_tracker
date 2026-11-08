@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+
 import { 
   MapPin, 
   Plus, 
@@ -19,7 +20,10 @@ import {
   Lock,
   CheckCircle2,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  Pencil,
+  Save,
+  X
 } from 'lucide-react';
 import { useTrips } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
@@ -29,6 +33,7 @@ import { api } from '../../services/api';
 import { db } from '../../db/database';
 import { useAppCurrency } from '../../utils/currency';
 import L from 'leaflet';
+import confetti from 'canvas-confetti';
 
 export const PlacesView: React.FC = () => {
   const { activeTrip } = useTrips();
@@ -43,6 +48,19 @@ export const PlacesView: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedPlaceForMap, setSelectedPlaceForMap] = useState<Place | null>(null);
 
+  // --- États modal EDIT (Update) ---
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingPlace, setEditingPlace] = useState<Place | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editCategory, setEditCategory] = useState<PlaceCategory>('Monuments');
+  const [editAddress, setEditAddress] = useState('');
+  const [editRating, setEditRating] = useState(5);
+  const [editDuration, setEditDuration] = useState(90);
+  const [editCost, setEditCost] = useState(0);
+  const [editImageUrl, setEditImageUrl] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
   // Review on visited place control
   const isTripVisited = activeTrip?.status === 'Terminé' || (activeTrip?.endDate ? new Date(activeTrip.endDate) < new Date() : false);
   const [placeForReview, setPlaceForReview] = useState<Place | null>(null);
@@ -53,76 +71,281 @@ export const PlacesView: React.FC = () => {
 
   // AI Suggestions supplémentaires
   const [addedSuggestions, setAddedSuggestions] = useState<string[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState<string[]>([]);
   const cityName = activeTrip?.destination ? activeTrip.destination.split(',')[0].trim() : 'Destination';
 
-  const placeSuggestions = [
-    {
-      idKey: 'sug-p-1',
-      name: `Rooftop Panoramique & Bar Tapas (${cityName})`,
-      category: 'Restaurant' as const,
-      desc: `Vue imprenable à 360° et dégustation de produits du terroir.`,
-      cost: 20,
-      duration: 90,
-      rating: 4.9,
-      imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80',
-      latOffset: 0.007,
-      lonOffset: 0.006
-    },
-    {
-      idKey: 'sug-p-2',
-      name: `Belvédère Secret & Parc Botanique (${cityName})`,
-      category: 'Nature' as const,
-      desc: `Havre de paix verdoyant et coucher de soleil idyllique hors des foules.`,
-      cost: 0,
-      duration: 75,
-      rating: 4.8,
-      imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
-      latOffset: -0.009,
-      lonOffset: -0.008
-    },
-    {
-      idKey: 'sug-p-3',
-      name: `Galerie Historique & Ateliers d'Art (${cityName})`,
-      category: 'Monuments' as const,
-      desc: `Rencontre avec les artisans locaux et découverte du patrimoine vivant.`,
-      cost: 12,
-      duration: 100,
-      rating: 4.7,
-      imageUrl: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&auto=format&fit=crop&q=80',
-      latOffset: 0.005,
-      lonOffset: -0.011
+  // --- Geocoding de la destination ---
+  const geocodeDestination = async (destination: string, country?: string): Promise<[number, number]> => {
+    // Construit une requête propre : prend la 2e partie après la virgule si elle existe
+    // ex: "Djerba la Douce, Tunisie" → essaie d'abord "Djerba, Tunisie", puis "Tunisie"
+    const parts = destination.split(',').map(s => s.trim());
+    const rawCity = parts[0];
+    const rawCountry = parts[1] || country || '';
+
+    // Nettoie les adjectifs poétiques : garde le 1er mot significatif de la ville
+    // ex: "Djerba la Douce" → "Djerba" | "Tokyo & Kyoto" → "Tokyo"
+    const cleanCity = rawCity.split(/\s+(?:la|le|les|et|&|the)\s+/i)[0].split('&')[0].trim();
+
+    const queries = [
+      cleanCity && rawCountry ? `${cleanCity}, ${rawCountry}` : null,
+      rawCountry ? rawCountry : null,
+      destination // dernier recours : requête originale
+    ].filter(Boolean) as string[];
+
+    for (const query of queries) {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`
+        );
+        const data = await res.json();
+        if (data && data.length > 0) {
+          return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        }
+      } catch {
+        // tentative suivante
+      }
     }
+    return [48.8566, 2.3522]; // Paris comme fallback neutre
+  };
+
+  const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
+
+  useEffect(() => {
+    if (!activeTrip?.destination) return;
+    geocodeDestination(activeTrip.destination, activeTrip.country).then(coords => setDestinationCoords(coords));
+  }, [activeTrip?.destination, activeTrip?.country]);
+  // ------------------------------------
+
+  // =====================================================================
+  // VRAIS LIEUX via Nominatim (OpenStreetMap) + Wikimedia Photos
+  // =====================================================================
+
+  // Cherche de vrais lieux via Nominatim avec countrycodes pour rester dans le bon pays
+  const fetchRealPlaceByType = async (
+    amenityType: string,
+    city: string,
+    country: string
+  ): Promise<{ name: string; lat: number; lon: number; address: string } | null> => {
+
+    // Map pays → code ISO 2 lettres pour forcer Nominatim dans le bon pays
+    const COUNTRY_CODES: Record<string, string> = {
+      tunisie: 'tn', france: 'fr', japon: 'jp', japan: 'jp', maroc: 'ma', morocco: 'ma',
+      espagne: 'es', spain: 'es', italie: 'it', italy: 'it', allemagne: 'de', germany: 'de',
+      'royaume-uni': 'gb', uk: 'gb', 'états-unis': 'us', usa: 'us', turquie: 'tr', turkey: 'tr',
+      egypte: 'eg', egypt: 'eg', grece: 'gr', greece: 'gr', portugal: 'pt',
+      algerie: 'dz', algeria: 'dz', belgique: 'be', belgium: 'be', suisse: 'ch', switzerland: 'ch',
+    };
+
+    const countryCode = COUNTRY_CODES[country.toLowerCase().trim()] || '';
+    const countryParam = countryCode ? `&countrycodes=${countryCode}` : '';
+
+    // Requêtes structurées : cherche par type Nominatim (amenity, tourism, leisure)
+    // dans la ville exacte avec filtre pays
+    const queries = [
+      `https://nominatim.openstreetmap.org/search?amenity=${amenityType}&city=${encodeURIComponent(city)}&format=json&limit=8&addressdetails=1${countryParam}`,
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(amenityType + ' ' + city)}&format=json&limit=8&addressdetails=1${countryParam}`,
+    ];
+
+    for (const url of queries) {
+      try {
+        const res = await fetch(url, { headers: { 'Accept-Language': 'fr,en' } });
+        const data = await res.json();
+        if (data && data.length > 0) {
+          // Filtre : nom valide + coordonnées proches du centre ville (pas à l'autre bout du monde)
+          const [centerLat, centerLon] = destinationCoords ?? [0, 0];
+          const valid = data.filter((d: { name?: string; lat: string; lon: string }) => {
+            if (!d.name || d.name.length < 2 || d.name.match(/^\d/)) return false;
+            // Vérifie que le lieu est à moins de 100km du centre de la destination
+            if (centerLat && centerLon) {
+              const dLat = Math.abs(parseFloat(d.lat) - centerLat);
+              const dLon = Math.abs(parseFloat(d.lon) - centerLon);
+              if (dLat > 1.0 || dLon > 1.0) return false; // ~100km max
+            }
+            return true;
+          });
+          if (valid.length > 0) {
+            const pick = valid[Math.floor(Math.random() * Math.min(valid.length, 5))];
+            return {
+              name: pick.name,
+              lat: parseFloat(pick.lat),
+              lon: parseFloat(pick.lon),
+              address: pick.display_name.split(',').slice(0, 3).join(', '),
+            };
+          }
+        }
+      } catch {
+        // tentative suivante
+      }
+    }
+    return null;
+  };
+
+  // Cherche une vraie photo sur Wikimedia Commons par nom de lieu + ville
+  const fetchWikimediaPhoto = async (placeName: string, city: string, category: string): Promise<string> => {
+    // Photos de fallback de qualité par catégorie
+    const fallbacks: Record<string, string> = {
+      Restaurant: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
+      Nature: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&auto=format&fit=crop&q=80',
+      Monuments: 'https://images.unsplash.com/photo-1568797629192-789acf8e4df3?w=600&auto=format&fit=crop&q=80',
+    };
+
+    try {
+      const searchTerm = `${placeName} ${city}`;
+      const wikiRes = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(searchTerm)}&prop=pageimages&format=json&pithumbsize=600&origin=*`
+      );
+      const wikiData = await wikiRes.json();
+      const pages = wikiData?.query?.pages;
+      if (pages) {
+        const page = Object.values(pages)[0] as { thumbnail?: { source: string } };
+        if (page?.thumbnail?.source) {
+          const src = page.thumbnail.source;
+          // Rejette les images qui sont des cartes géographiques ou drapeaux (trop petites ou SVG)
+          if (!src.includes('.svg') && !src.includes('Flag') && !src.includes('map') && !src.includes('Map')) {
+            return src;
+          }
+        }
+      }
+    } catch { /* silencieux */ }
+
+    try {
+      const commonsRes = await fetch(
+        `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(placeName + ' ' + city)}&srnamespace=6&format=json&origin=*&srlimit=3`
+      );
+      const commonsData = await commonsRes.json();
+      const results = commonsData?.query?.search;
+      if (results?.length > 0) {
+        // Essaie les 3 premiers résultats pour éviter cartes/logos
+        for (const result of results) {
+          const fileName = result.title.replace('File:', '');
+          // Filtre les noms de fichiers qui semblent être des cartes
+          if (fileName.toLowerCase().includes('map') || fileName.toLowerCase().includes('flag') ||
+              fileName.toLowerCase().includes('logo') || fileName.endsWith('.svg')) continue;
+
+          const imgRes = await fetch(
+            `https://commons.wikimedia.org/w/api.php?action=query&titles=File:${encodeURIComponent(fileName)}&prop=imageinfo&iiprop=url|mime&format=json&origin=*`
+          );
+          const imgData = await imgRes.json();
+          const imgPages = imgData?.query?.pages;
+          if (imgPages) {
+            const imgPage = Object.values(imgPages)[0] as { imageinfo?: { url: string; mime: string }[] };
+            const info = imgPage?.imageinfo?.[0];
+            // Accepte seulement les vraies photos (jpeg/png, pas svg)
+            if (info?.url && info.mime?.startsWith('image/') && !info.mime.includes('svg')) {
+              return info.url;
+            }
+          }
+        }
+      }
+    } catch { /* silencieux */ }
+
+    return fallbacks[category] || fallbacks['Monuments'];
+  };
+
+  // Configuration des 3 types de suggestions avec les vrais types Nominatim amenity
+  const SUGGESTION_TYPES = [
+    { type: 'restaurant', label: 'Restaurant' as PlaceCategory, cost: 20, duration: 90,
+      desc: (city: string) => `Savourez la cuisine locale authentique de ${city}.` },
+    { type: 'park', label: 'Nature' as PlaceCategory, cost: 0, duration: 75,
+      desc: (city: string) => `Espace naturel et verdoyant au cœur de ${city}.` },
+    { type: 'museum', label: 'Monuments' as PlaceCategory, cost: 12, duration: 100,
+      desc: (city: string) => `Découvrez le patrimoine historique de ${city}.` },
   ];
 
-  const handleAddSuggestedPlace = async (sug: typeof placeSuggestions[0]) => {
+  // État des suggestions chargées dynamiquement
+  const [realSuggestions, setRealSuggestions] = useState<{
+    idKey: string;
+    name: string;
+    category: PlaceCategory;
+    desc: string;
+    cost: number;
+    duration: number;
+    rating: number;
+    lat: number;
+    lon: number;
+    address: string;
+    imageUrl: string;
+  }[]>([]);
+  const [loadingRealSuggestions, setLoadingRealSuggestions] = useState(false);
+
+  // Charge les vrais lieux quand la destination est géocodée
+  useEffect(() => {
+    if (!destinationCoords || !activeTrip) return;
+    setLoadingRealSuggestions(true);
+    setRealSuggestions([]);
+
+    const cleanCity = cityName.split(/\s+(?:la|le|les|et|&|the)\s+/i)[0].split('&')[0].trim();
+    const country = activeTrip.country || '';
+
+    Promise.all(
+      SUGGESTION_TYPES.map(async (st, i) => {
+        const place = await fetchRealPlaceByType(st.type, cleanCity, country);
+        if (!place) return null;
+
+        const imageUrl = await fetchWikimediaPhoto(place.name, cleanCity, st.label);
+
+        return {
+          idKey: `sug-real-${st.type}-${i}`,
+          name: place.name,
+          category: st.label,
+          desc: st.desc(cleanCity),
+          cost: st.cost,
+          duration: st.duration,
+          rating: parseFloat((4.3 + Math.random() * 0.6).toFixed(1)),
+          lat: place.lat,
+          lon: place.lon,
+          address: place.address,
+          imageUrl,
+        };
+      })
+    ).then(results => {
+      setRealSuggestions(results.filter(Boolean) as typeof realSuggestions);
+      setLoadingRealSuggestions(false);
+    });
+  }, [destinationCoords, activeTrip?.id]);
+
+  // Ajoute un vrai lieu sur la carte — vérifie d'abord qu'il n'existe pas déjà
+  const handleAddRealSuggestion = async (sug: typeof realSuggestions[0]) => {
     if (!activeTrip) return;
-    const baseLat = places.length > 0 ? places[0].latitude : 41.3851;
-    const baseLon = places.length > 0 ? places[0].longitude : 2.1734;
+
+    // Empêche la duplication : vérifie si un lieu avec ce nom existe déjà
+    const alreadyExists = places.some(p =>
+      p.name.toLowerCase().trim() === sug.name.toLowerCase().trim()
+    );
+    if (alreadyExists) {
+      setAddedSuggestions(prev => [...prev, sug.idKey]);
+      return;
+    }
+
+    setLoadingSuggestions(prev => [...prev, sug.idKey]);
 
     const newPlace: Place = {
-      id: `plc-sug-${Date.now()}`,
+      id: `plc-real-${Date.now()}`,
       tripId: activeTrip.id,
       name: sug.name,
       category: sug.category,
-      address: `${sug.name}, ${activeTrip.destination}`,
-      latitude: baseLat + sug.latOffset,
-      longitude: baseLon + sug.lonOffset,
+      address: sug.address,
+      latitude: sug.lat,
+      longitude: sug.lon,
       rating: sug.rating,
       estimatedDurationMinutes: sug.duration,
       costEstimate: sug.cost,
       imageUrl: sug.imageUrl,
-      notes: `Lieu suggéré par l'IA pour compléter votre séjour à ${cityName}.`,
-      createdAt: new Date().toISOString()
+      notes: `Lieu réel trouvé sur OpenStreetMap pour votre séjour à ${cityName}.`,
+      createdAt: new Date().toISOString(),
     };
 
     await api.places.create(newPlace);
     setPlaces(prev => [...prev, newPlace]);
     setAddedSuggestions(prev => [...prev, sug.idKey]);
+    setLoadingSuggestions(prev => prev.filter(k => k !== sug.idKey));
+    confetti({ particleCount: 60, spread: 50 });
 
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo([newPlace.latitude, newPlace.longitude], 14, { duration: 1.2 });
+      mapInstanceRef.current.flyTo([newPlace.latitude, newPlace.longitude], 15, { duration: 1.2 });
     }
   };
+  // =====================================================================
 
   const handleOpenReview = (place: Place) => {
     if (!isTripVisited) {
@@ -164,8 +387,16 @@ export const PlacesView: React.FC = () => {
   const [name, setName] = useState('');
   const [category, setCategory] = useState<PlaceCategory>('Monuments');
   const [address, setAddress] = useState('');
-  const [latitude, setLatitude] = useState(35.6764);
-  const [longitude, setLongitude] = useState(139.6993);
+  const [latitude, setLatitude] = useState(0);
+  const [longitude, setLongitude] = useState(0);
+
+  // Pré-remplit les coords du formulaire avec la destination géocodée
+  useEffect(() => {
+    if (destinationCoords) {
+      setLatitude(destinationCoords[0]);
+      setLongitude(destinationCoords[1]);
+    }
+  }, [destinationCoords]);
   const [rating, setRating] = useState(5);
   const [duration, setDuration] = useState(90);
   const [cost, setCost] = useState(10);
@@ -257,21 +488,27 @@ export const PlacesView: React.FC = () => {
       err => {
         console.warn('Geolocation error:', err.message);
         setIsLocating(false);
-        // Fallback default coordinates if user denies permission
-        setUserLocation({ lat: 35.6764, lng: 139.6993 });
+        // Ne pas forcer une position si l'utilisateur refuse la géolocalisation
       },
       { timeout: 8000 }
     );
   };
+
+  // Re-centrer la carte sur la destination quand les coords arrivent et qu'il n'y a pas de lieux
+  useEffect(() => {
+    if (!destinationCoords || !mapInstanceRef.current || places.length > 0) return;
+    mapInstanceRef.current.flyTo(destinationCoords, 12, { duration: 1.5 });
+  }, [destinationCoords]);
 
   // Initialize and update Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
     if (!mapInstanceRef.current) {
+      // Priorité : 1er lieu existant → coordonnées geocodées de la destination → Paris
       const defaultCenter: [number, number] = places.length > 0
         ? [places[0].latitude, places[0].longitude]
-        : [35.6764, 139.6993];
+        : destinationCoords ?? [48.8566, 2.3522];
 
       const map = L.map(mapContainerRef.current, {
         center: defaultCenter,
@@ -343,9 +580,12 @@ export const PlacesView: React.FC = () => {
         mapInstanceRef.current.fitBounds(polyline.getBounds(), { padding: [40, 40] });
       } else if (latLngs.length === 1) {
         mapInstanceRef.current.setView(latLngs[0], 13);
+      } else if (destinationCoords) {
+        // Aucun lieu encore : centrer sur la destination géocodée
+        mapInstanceRef.current.setView(destinationCoords, 12);
       }
     }
-  }, [places, filteredCategory, searchQuery]);
+  }, [places, filteredCategory, searchQuery, destinationCoords]);
 
   // Center on specific place when card is clicked
   const handleFocusPlaceOnMap = (place: Place) => {
@@ -382,8 +622,47 @@ export const PlacesView: React.FC = () => {
   const handleDeletePlace = async (id: string) => {
     if (confirm('Supprimer ce lieu du voyage ?')) {
       await api.places.delete(id);
-      await loadPlaces();
+      setPlaces(prev => prev.filter(p => p.id !== id));
     }
+  };
+
+  // --- EDIT handlers (UPDATE) ---
+  const handleOpenEdit = (place: Place) => {
+    setEditingPlace(place);
+    setEditName(place.name);
+    setEditCategory(place.category);
+    setEditAddress(place.address);
+    setEditRating(place.rating);
+    setEditDuration(place.estimatedDurationMinutes);
+    setEditCost(place.costEstimate);
+    setEditImageUrl(place.imageUrl || '');
+    setEditNotes(place.notes || '');
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPlace) return;
+    setIsSavingEdit(true);
+
+    const updates: Partial<Place> = {
+      name: editName,
+      category: editCategory,
+      address: editAddress,
+      rating: Number(editRating),
+      estimatedDurationMinutes: Number(editDuration),
+      costEstimate: Number(editCost),
+      imageUrl: editImageUrl,
+      notes: editNotes,
+    };
+
+    await api.places.update(editingPlace.id, updates);
+    setPlaces(prev => prev.map(p =>
+      p.id === editingPlace.id ? { ...p, ...updates } : p
+    ));
+    setIsSavingEdit(false);
+    setIsEditModalOpen(false);
+    setEditingPlace(null);
   };
 
   const categories: PlaceCategory[] = ['Monuments', 'Restaurant', 'Hébergement', 'Nature', 'Plage', 'Shopping', 'Autre'];
@@ -488,67 +767,128 @@ export const PlacesView: React.FC = () => {
         )}
       </div>
 
-      {/* AI Smart Suggestions for extra places */}
+      {/* Suggestions Lieux Réels via OpenStreetMap */}
       {activeTrip && (
         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-slate-900 to-sky-500/10 border border-amber-500/30 space-y-3 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
               <h3 className="text-sm sm:text-base font-bold text-white">
-                ✨ Autres suggestions IA pour enrichir votre séjour à {cityName}
+                ✨ Lieux réels à découvrir à {cityName}
               </h3>
             </div>
             <span className="text-[11px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
-              Recommandations Intelligentes
+              Données OpenStreetMap
             </span>
           </div>
           <p className="text-xs text-slate-400">
-            L'IA a déniché ces pépites supplémentaires pour votre destination. Ajoutez-les sur votre carte en un clic !
+            Vrais établissements trouvés près de votre destination. Ajoutez-les sur votre carte en un clic !
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-            {placeSuggestions.map(sug => {
-              const isAdded = addedSuggestions.includes(sug.idKey) || places.some(p => p.name === sug.name);
-              return (
-                <div key={sug.idKey} className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-col justify-between space-y-2 hover:border-amber-500/40 transition-colors">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-amber-300 text-[11px] bg-slate-800 px-2 py-0.5 rounded-md">
-                        {sug.category}
-                      </span>
-                      <span className="text-slate-400 text-[11px]">
-                        ⭐ {sug.rating} • {sug.cost > 0 ? `${sug.cost} €` : 'Gratuit'}
-                      </span>
-                    </div>
-                    <h4 className="text-xs font-bold text-white leading-tight">{sug.name}</h4>
-                    <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">{sug.desc}</p>
-                  </div>
-
-                  <button
-                    onClick={() => handleAddSuggestedPlace(sug)}
-                    disabled={isAdded}
-                    className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 transition-all ${
-                      isAdded
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default'
-                        : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                    }`}
-                  >
-                    {isAdded ? (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Ajouté sur la carte</span>
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Ajouter à la carte</span>
-                      </>
-                    )}
-                  </button>
+          {/* État de chargement des suggestions */}
+          {loadingRealSuggestions && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-2 animate-pulse">
+                  <div className="h-3 bg-slate-700 rounded w-1/3" />
+                  <div className="h-4 bg-slate-700 rounded w-3/4" />
+                  <div className="h-3 bg-slate-700 rounded w-full" />
+                  <div className="h-3 bg-slate-700 rounded w-2/3" />
+                  <div className="h-7 bg-slate-700 rounded-lg mt-2" />
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {/* Aucun résultat */}
+          {!loadingRealSuggestions && realSuggestions.length === 0 && (
+            <div className="text-center py-4 text-slate-400 text-xs">
+              <AlertCircle className="w-5 h-5 mx-auto mb-1 text-amber-500/60" />
+              Aucun lieu trouvé à proximité. Essayez d'ajouter un lieu manuellement.
+            </div>
+          )}
+
+          {/* Grille des vrais lieux */}
+          {!loadingRealSuggestions && realSuggestions.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+              {realSuggestions.map(sug => {
+                const isAdded = addedSuggestions.includes(sug.idKey) || places.some(p => p.name === sug.name);
+                const isLoading = loadingSuggestions.includes(sug.idKey);
+                return (
+                  <div key={sug.idKey} className="bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden flex flex-col hover:border-amber-500/40 transition-colors">
+                    {/* Photo réelle du lieu */}
+                    <div className="relative h-28 w-full bg-slate-800">
+                      <img
+                        src={sug.imageUrl}
+                        alt={sug.name}
+                        className="w-full h-full object-cover"
+                        onError={e => {
+                          // Si la photo échoue, fallback par catégorie
+                          const fallbacks: Record<string, string> = {
+                            Restaurant: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
+                            Nature: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&auto=format&fit=crop&q=80',
+                            Monuments: 'https://images.unsplash.com/photo-1539785695328-4d7bbfc52568?w=600&auto=format&fit=crop&q=80',
+                          };
+                          (e.target as HTMLImageElement).src = fallbacks[sug.category] || fallbacks['Monuments'];
+                        }}
+                      />
+                      <div className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] text-amber-300 font-semibold border border-amber-500/30">
+                        {sug.category}
+                      </div>
+                      <div className="absolute top-2 right-2 bg-amber-500 text-slate-950 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                        ⭐ {sug.rating}
+                      </div>
+                    </div>
+
+                    <div className="p-3 flex flex-col flex-1 justify-between space-y-2">
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-bold text-white leading-tight line-clamp-2">{sug.name}</h4>
+                        <p className="text-[10px] text-slate-500 truncate">📍 {sug.address}</p>
+                        <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">{sug.desc}</p>
+                        <div className="flex items-center space-x-2 text-[10px] text-slate-400 pt-1">
+                          <span>⏱ {sug.duration} min</span>
+                          <span>•</span>
+                          <span className="text-amber-400 font-semibold">{sug.cost > 0 ? `~${sug.cost} €` : 'Gratuit'}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleAddRealSuggestion(sug)}
+                        disabled={isAdded || isLoading}
+                        className={`w-full py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 transition-all ${
+                          isAdded
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default'
+                            : isLoading
+                            ? 'bg-slate-700 text-slate-400 cursor-wait border border-slate-600'
+                            : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                        }`}
+                      >
+                        {isAdded ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Ajouté sur la carte</span>
+                          </>
+                        ) : isLoading ? (
+                          <>
+                            <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                            </svg>
+                            <span>Ajout en cours...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Ajouter à la carte</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -680,16 +1020,30 @@ export const PlacesView: React.FC = () => {
                       </div>
 
                       {canManagePlaces && (
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleDeletePlace(place.id);
-                          }}
-                          className="text-slate-500 hover:text-rose-400 p-1"
-                          title="Supprimer ce lieu"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center space-x-1">
+                          {/* Bouton EDIT */}
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleOpenEdit(place);
+                            }}
+                            className="text-slate-500 hover:text-sky-400 p-1 transition-colors"
+                            title="Modifier ce lieu"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          {/* Bouton DELETE */}
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleDeletePlace(place.id);
+                            }}
+                            className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+                            title="Supprimer ce lieu"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -698,6 +1052,118 @@ export const PlacesView: React.FC = () => {
             })}
         </div>
       </div>
+
+      {/* Modal: EDIT Place (UPDATE) */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => { setIsEditModalOpen(false); setEditingPlace(null); }}
+        title={`✏️ Modifier — ${editingPlace?.name || 'Lieu'}`}
+        subtitle="Modifiez les informations de ce lieu"
+      >
+        <form onSubmit={handleSaveEdit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Nom du lieu</label>
+              <input
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                required
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Catégorie</label>
+              <select
+                value={editCategory}
+                onChange={e => setEditCategory(e.target.value as PlaceCategory)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500"
+              >
+                {(['Monuments','Restaurant','Hébergement','Nature','Plage','Shopping','Autre'] as PlaceCategory[]).map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Adresse</label>
+            <input
+              value={editAddress}
+              onChange={e => setEditAddress(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Note ⭐</label>
+              <input
+                type="number" min="1" max="5" step="0.1"
+                value={editRating}
+                onChange={e => setEditRating(Number(e.target.value))}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Durée (min)</label>
+              <input
+                type="number" min="0"
+                value={editDuration}
+                onChange={e => setEditDuration(Number(e.target.value))}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Coût (€)</label>
+              <input
+                type="number" min="0"
+                value={editCost}
+                onChange={e => setEditCost(Number(e.target.value))}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">URL Image</label>
+            <input
+              value={editImageUrl}
+              onChange={e => setEditImageUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Notes</label>
+            <textarea
+              value={editNotes}
+              onChange={e => setEditNotes(e.target.value)}
+              rows={2}
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500 resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end space-x-2 pt-2">
+            <button
+              type="button"
+              onClick={() => { setIsEditModalOpen(false); setEditingPlace(null); }}
+              className="flex items-center space-x-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold rounded-xl"
+            >
+              <X className="w-4 h-4" />
+              <span>Annuler</span>
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingEdit}
+              className="flex items-center space-x-1 px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-sky-600/25 transition-all disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              <span>{isSavingEdit ? 'Enregistrement...' : 'Enregistrer'}</span>
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Modal: Add Place */}
       <Modal
