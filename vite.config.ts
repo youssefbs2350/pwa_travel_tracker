@@ -25,7 +25,7 @@ export default defineConfig({
         id: '/',
         name: 'Travel Tracker PWA',
         short_name: 'TravelTracker',
-        description: 'Application PWA tout-en-un connectée à MongoDB et utilisable 100% hors-ligne.',
+        description: 'Application PWA tout-en-un organisez et optimisez vos séjours intelligemment.',
         theme_color: '#0284c7',
         background_color: '#020617',
         display: 'standalone',

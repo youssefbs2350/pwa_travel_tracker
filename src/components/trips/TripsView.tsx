@@ -508,7 +508,7 @@ export const TripsView: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Générateur intelligent d'itinéraires sur-mesure, trousseau de valise IA, export agenda & documents hors-ligne.
+              Générateur intelligent d'itinéraires sur-mesure, trousseau de valise IA, export agenda & documents de voyage.
             </p>
           </div>
         </div>
@@ -1221,7 +1221,7 @@ export const TripsView: React.FC = () => {
         isOpen={!!docsModalTrip}
         onClose={() => setDocsModalTrip(null)}
         title={`Coffre-fort Documents • ${docsModalTrip?.title || ''}`}
-        subtitle="Billets d'avion, vouchers d'hôtel et polices d'assurance stockés 100% hors-ligne"
+        subtitle="Billets d'avion, vouchers d'hôtel et polices d'assurance sécurisés pour vos voyages"
       >
         {docsModalTrip && (
           <div className="space-y-4">

@@ -23,7 +23,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({ isOpen, onClos
       isOpen={isOpen}
       onClose={onClose}
       title="Installer Travel Tracker PWA"
-      subtitle="Profitez de l'expérience hors ligne, des notifications et d'un accès instantané sans passer par les stores d'applications."
+      subtitle="Profitez des notifications, d'un accès instantané et d'une fluidité maximale sans passer par les stores d'applications."
     >
       <div className="space-y-6">
         {/* Banner */}
