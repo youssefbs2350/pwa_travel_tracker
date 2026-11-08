@@ -86,6 +86,130 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// POST join trip by share code
+router.post('/join', async (req: Request, res: Response) => {
+  try {
+    const { shareCode, userName } = req.body;
+    if (!shareCode || !userName) {
+      return res.status(400).json({ error: 'Code de partage et nom d’utilisateur requis' });
+    }
+
+    const cleanCode = shareCode.trim().toUpperCase();
+    const cleanUser = userName.trim().split(' ')[0];
+
+    const trip = await TripModel.findOne({ shareCode: cleanCode });
+    if (!trip) {
+      return res.status(404).json({ error: 'Aucun voyage trouvé avec ce code de partage.' });
+    }
+
+    if (!trip.participants.includes(cleanUser)) {
+      trip.participants.push(cleanUser);
+      trip.updatedAt = new Date();
+      await trip.save();
+    }
+
+    res.json({ success: true, message: `Vous avez rejoint le voyage "${trip.title}" avec succès !`, trip });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST duplicate trip (Ameni: Duplication complète d'un séjour avec décalage de dates)
+router.post('/:id/duplicate', async (req: Request, res: Response) => {
+  try {
+    const requesterRole = (req.headers['x-user-role'] as string) || req.body.requesterRole;
+    if (requesterRole && requesterRole === 'Traveler') {
+      return res.status(403).json({ 
+        error: 'Accès refusé : La duplication de séjours est réservée aux Organisateurs et Administrateurs.' 
+      });
+    }
+
+    const originalTrip = await TripModel.findById(req.params.id);
+    if (!originalTrip) return res.status(404).json({ error: 'Voyage d’origine introuvable' });
+
+    // Calculate duration in days
+    const origStart = new Date(originalTrip.startDate);
+    const origEnd = new Date(originalTrip.endDate);
+    const diffDays = Math.max(1, Math.round((origEnd.getTime() - origStart.getTime()) / 86400000));
+
+    // New dates starting tomorrow
+    const newStart = new Date(Date.now() + 86400000);
+    const newEnd = new Date(newStart.getTime() + diffDays * 86400000);
+
+    const newShareCode = 'TRIP-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+
+    const clonedTrip = new TripModel({
+      userId: req.body.userId || originalTrip.userId,
+      title: `${originalTrip.title} (Copie)`,
+      destination: originalTrip.destination,
+      country: originalTrip.country,
+      startDate: newStart.toISOString().split('T')[0],
+      endDate: newEnd.toISOString().split('T')[0],
+      coverImage: originalTrip.coverImage,
+      budgetTotal: originalTrip.budgetTotal,
+      currency: originalTrip.currency,
+      status: 'Planifié',
+      participants: req.body.userName ? [req.body.userName] : originalTrip.participants,
+      itinerarySummary: originalTrip.itinerarySummary,
+      notes: originalTrip.notes,
+      shareCode: newShareCode,
+      packingList: originalTrip.packingList || [],
+      travelDocs: [],
+      destinationMeta: originalTrip.destinationMeta || {}
+    });
+    await clonedTrip.save();
+
+    // Clone places
+    const origPlaces = await PlaceModel.find({ tripId: originalTrip._id.toString() });
+    const placeIdMap: Record<string, string> = {};
+
+    for (const p of origPlaces) {
+      const clonedPlace = new PlaceModel({
+        tripId: clonedTrip._id.toString(),
+        name: p.name,
+        category: p.category,
+        address: p.address,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        rating: p.rating,
+        estimatedDurationMinutes: p.estimatedDurationMinutes,
+        costEstimate: p.costEstimate,
+        imageUrl: p.imageUrl,
+        notes: p.notes
+      });
+      await clonedPlace.save();
+      placeIdMap[p._id.toString()] = clonedPlace._id.toString();
+    }
+
+    // Clone activities with adjusted dates
+    const origActivities = await ActivityModel.find({ tripId: originalTrip._id.toString() });
+    for (const a of origActivities) {
+      const actDayOffset = (a.dayNumber || 1) - 1;
+      const actDate = new Date(newStart.getTime() + actDayOffset * 86400000).toISOString().split('T')[0];
+      const newPlaceId = a.placeId ? placeIdMap[a.placeId] : undefined;
+
+      const clonedActivity = new ActivityModel({
+        tripId: clonedTrip._id.toString(),
+        placeId: newPlaceId,
+        dayNumber: a.dayNumber,
+        date: actDate,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        title: a.title,
+        description: a.description,
+        cost: a.cost,
+        status: 'À faire',
+        orderIndex: a.orderIndex
+      });
+      await clonedActivity.save();
+    }
+
+    res.status(201).json(clonedTrip);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // POST /api/trips/generate (Ameni: Générateur d'itinéraire IA réservé aux Organisateurs & Admins)
 router.post('/generate', async (req: Request, res: Response) => {
   try {

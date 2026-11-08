@@ -255,16 +255,49 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenNewTripModal, onNavigateTa
                         </button>
                       )}
 
-                      <button
-                        onClick={() => {
-                          setShowUserMenu(false);
-                          logout();
-                        }}
-                        className="w-full text-left px-3 py-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors flex items-center space-x-2 font-semibold"
-                      >
-                        <LogOut className="w-3.5 h-3.5" />
-                        <span>Se Déconnecter</span>
-                      </button>
+                      {/* Quick Switch Profile (Demo & Testing) */}
+                      {allUsers.length > 1 && (
+                        <div className="border-t border-slate-800 pt-1.5 mt-1">
+                          <p className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            Changer de compte
+                          </p>
+                          <div className="space-y-0.5 max-h-40 overflow-y-auto">
+                            {allUsers.map(u => (
+                              <button
+                                key={u.id}
+                                onClick={() => {
+                                  setShowUserMenu(false);
+                                  switchUser(u.id);
+                                }}
+                                className={`w-full text-left px-3 py-1.5 flex items-center justify-between rounded-lg transition-colors ${
+                                  currentUser?.id === u.id
+                                    ? 'bg-amber-500/15 text-amber-300 font-bold'
+                                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                }`}
+                              >
+                                <div className="flex items-center space-x-2 truncate">
+                                  <img src={u.avatar} alt={u.name} className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
+                                  <span className="truncate">{u.name} ({u.role})</span>
+                                </div>
+                                {currentUser?.id === u.id && <UserCheck className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="border-t border-slate-800 pt-1 mt-1">
+                        <button
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            logout();
+                          }}
+                          className="w-full text-left px-3 py-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors flex items-center space-x-2 font-semibold"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          <span>Se Déconnecter</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

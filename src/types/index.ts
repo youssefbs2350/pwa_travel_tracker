@@ -18,6 +18,38 @@ export interface User {
 
 export type TripStatus = 'Brouillon' | 'Planifié' | 'En cours' | 'Terminé';
 
+export type PackingCategory = 'Vêtements' | 'Documents' | 'Hygiène & Soins' | 'Électronique' | 'Spécifique Destination';
+
+export interface PackingItem {
+  id: string;
+  label: string;
+  category: PackingCategory;
+  isPacked: boolean;
+  assignedTo?: string;
+}
+
+export type TravelDocCategory = 'Vol / Billet' | 'Hôtel / Logement' | 'Assurance' | 'Identité / Visa' | 'Autre';
+
+export interface TravelDoc {
+  id: string;
+  title: string;
+  category: TravelDocCategory;
+  referenceCode?: string;
+  fileUrl?: string;
+  fileName?: string;
+  notes?: string;
+  uploadedAt: string;
+}
+
+export interface DestinationMeta {
+  timezone?: string;
+  emergencyNumbers?: { police: string; ambulance: string };
+  plugType?: string;
+  language?: string;
+  currency?: string;
+  bestMonths?: string;
+}
+
 export interface Trip {
   id: string;
   userId: string;
@@ -33,6 +65,13 @@ export interface Trip {
   participants: string[];
   notes?: string;
   itinerarySummary?: string;
+  shareCode?: string;
+  packingList?: PackingItem[];
+  travelDocs?: TravelDoc[];
+  destinationMeta?: DestinationMeta;
+  tripPace?: 'Relaxed' | 'Balanced' | 'Intense';
+  tripTheme?: string;
+  travelStyle?: 'Économique' | 'Équilibré' | 'Confort';
   createdAt: string;
   updatedAt: string;
 }

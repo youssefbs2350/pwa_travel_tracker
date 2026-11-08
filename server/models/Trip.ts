@@ -14,6 +14,13 @@ export interface ITrip extends Document {
   participants: string[];
   itinerarySummary?: string;
   notes?: string;
+  shareCode?: string;
+  packingList?: any[];
+  travelDocs?: any[];
+  destinationMeta?: any;
+  tripPace?: string;
+  tripTheme?: string;
+  travelStyle?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +39,13 @@ const TripSchema = new Schema<ITrip>({
   participants: { type: [String], default: [] },
   itinerarySummary: { type: String, default: '' },
   notes: { type: String, default: '' },
+  shareCode: { type: String, default: '' },
+  packingList: { type: [Schema.Types.Mixed], default: [] },
+  travelDocs: { type: [Schema.Types.Mixed], default: [] },
+  destinationMeta: { type: Schema.Types.Mixed, default: {} },
+  tripPace: { type: String, default: 'Balanced' },
+  tripTheme: { type: String, default: 'Culture & Gastronomie' },
+  travelStyle: { type: String, default: 'Équilibré' },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

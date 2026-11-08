@@ -11,22 +11,46 @@ import {
   Edit3, 
   CheckCircle2, 
   ArrowRight,
-  PlaneTakeoff
+  PlaneTakeoff,
+  Copy,
+  Check,
+  Luggage,
+  FileText,
+  Download,
+  Printer,
+  Share2,
+  Clock,
+  ExternalLink,
+  RefreshCw,
+  X,
+  ChevronRight,
+  Info,
+  Shield,
+  Layers,
+  Search,
+  Upload
 } from 'lucide-react';
 import { useTrips } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
-import { Trip, TripStatus, Place, Activity, Expense } from '../../types';
+import { Trip, TripStatus, Place, Activity, Expense, PackingItem, PackingCategory, TravelDoc, TravelDocCategory } from '../../types';
 import { Modal } from '../common/Modal';
 import { db } from '../../db/database';
 import { useAppCurrency } from '../../utils/currency';
+import { 
+  generateFullSmartTrip, 
+  generateSmartPackingList, 
+  resolveDestinationIntelligence, 
+  DESTINATIONS_DB 
+} from '../../services/aiTripPlanner';
+import { exportTripToIcs, printTripRoadbook } from '../../utils/calendarExport';
 
-export const getDestinationCover = (dest: string) => {
-  const d = dest.toLowerCase();
+export const getDestinationCover = (dest: string): string => {
+  const d = (dest || '').toLowerCase();
   if (d.includes('paris') || d.includes('france')) return 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200&auto=format&fit=crop&q=85';
   if (d.includes('tokyo') || d.includes('japon') || d.includes('kyoto') || d.includes('tokio')) return 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1200&auto=format&fit=crop&q=85';
   if (d.includes('barcelon') || d.includes('madrid') || d.includes('espagne') || d.includes('brcelon') || d.includes('barca')) return 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=1200&auto=format&fit=crop&q=85';
   if (d.includes('rome') || d.includes('italie') || d.includes('venise') || d.includes('roma')) return 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&auto=format&fit=crop&q=85';
-  if (d.includes('djerba') || d.includes('tunis') || d.includes('tunisie') || d.includes('jerba') || d.includes('zarzis')) return 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=85';
+  if (d.includes('djerba') || d.includes('tunis') || d.includes('tunisie') || d.includes('jerba') || d.includes('zarzis') || d.includes('tozeur')) return 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=85';
   if (d.includes('londres') || d.includes('london') || d.includes('uk')) return 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=1200&auto=format&fit=crop&q=85';
   if (d.includes('new york') || d.includes('usa') || d.includes('nyc')) return 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=1200&auto=format&fit=crop&q=85';
   if (d.includes('istanbul') || d.includes('turquie') || d.includes('istanboul')) return 'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=1200&auto=format&fit=crop&q=85';
@@ -38,193 +62,48 @@ export const getDestinationCover = (dest: string) => {
   return 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&auto=format&fit=crop&q=85';
 };
 
-interface ResolvedDestination {
-  standardizedName: string;
-  cityName: string;
-  countryName: string;
-  lat: number;
-  lon: number;
-  coverImage: string;
-  travelTips: string[];
-}
-
-export const resolveDestinationWithAI = async (rawQuery: string): Promise<ResolvedDestination> => {
-  const q = (rawQuery || '').trim().toLowerCase();
-
-  // Dictionnaire fuzzy pour destinations fréquentes et tolérance aux fautes d'orthographe
-  const knownDestinations: Record<string, { city: string; country: string; lat: number; lon: number; image: string; tips: string[] }> = {
-    barcelon: {
-      city: 'Barcelone',
-      country: 'Espagne',
-      lat: 41.3851,
-      lon: 2.1734,
-      image: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=1200&auto=format&fit=crop&q=85',
-      tips: [
-        '🎟️ Sagrada Família & Parc Güell : Réservez vos billets coupe-file au moins 10 jours avant pour économiser jusqu\'à 20%.',
-        '🚇 Transport malin : Achetez une carte T-Casual (10 trajets) pour diviser vos frais de métro par deux.',
-        '🍽️ Tapas locaux : Privilégiez les quartiers Gràcia et Poble Sec plutôt que les artères ultra-touristiques.'
-      ]
-    },
-    brcelon: {
-      city: 'Barcelone',
-      country: 'Espagne',
-      lat: 41.3851,
-      lon: 2.1734,
-      image: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=1200&auto=format&fit=crop&q=85',
-      tips: [
-        '🎟️ Billets coupe-file recommandés pour la Sagrada Família.',
-        '🚇 Carte T-Casual pour se déplacer à moindre coût.',
-        '🍽️ Dégustations authentiques dans les ruelles du Born.'
-      ]
-    },
-    djerba: {
-      city: 'Djerba',
-      country: 'Tunisie',
-      lat: 33.8076,
-      lon: 10.8451,
-      image: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=85',
-      tips: [
-        '🎨 Djerbahood : Visitez la galerie de street-art à ciel ouvert à Erriadh en fin d\'après-midi.',
-        '🐟 Repas de pêcheur : Choisissez votre poisson frais à la criée de Houmt Souk pour une cuisson minute à 15 TND.',
-        '🏺 Poteries artisanales : Visitez les ateliers traditionnels de Guellala pour des prix direct fabricant.'
-      ]
-    },
-    marakech: {
-      city: 'Marrakech',
-      country: 'Maroc',
-      lat: 31.6295,
-      lon: -7.9811,
-      image: 'https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=1200&auto=format&fit=crop&q=85',
-      tips: [
-        '🌿 Jardin Majorelle : Créneau de 08h30 impératif pour éviter la chaleur et la foule.',
-        '🍵 Rooftops : Admirez le coucher de soleil sur la Koutoubia depuis un café de la place Jemaa el-Fna.',
-        '🛍️ Souks de la Médina : Prenez le temps d\'échanger chaleureusement avec les artisans tannerie et épices.'
-      ]
-    },
-    tokio: {
-      city: 'Tokyo',
-      country: 'Japon',
-      lat: 35.6762,
-      lon: 139.6503,
-      image: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1200&auto=format&fit=crop&q=85',
-      tips: [
-        '🚇 Tokyo Subway Pass 72h : Métro illimité pour seulement ~9 €.',
-        '🗼 Belvédère de Shinjuku : Vue panoramique à 360° au 45e étage de la mairie, 100% gratuite.',
-        '🍜 Ramen authentiques : Commandez sur borne dans les ruelles de Shinjuku pour ~6 €.'
-      ]
-    },
-    rome: {
-      city: 'Rome',
-      country: 'Italie',
-      lat: 41.9028,
-      lon: 12.4964,
-      image: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&auto=format&fit=crop&q=85',
-      tips: [
-        '🏛️ Billet combiné Colisée + Forum Romain le matin.',
-        '🍝 Quartier Trastevere pour de vraies pâtes Carbonara & Cacio e Pepe traditionnelles.',
-        '💧 Fontaines gratuites historiques « Nasoni » pour remplir sa gourde partout.'
-      ]
-    },
-    istanbul: {
-      city: 'Istanbul',
-      country: 'Turquie',
-      lat: 41.0082,
-      lon: 28.9784,
-      image: 'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=1200&auto=format&fit=crop&q=85',
-      tips: [
-        '🚢 Ferry public Bosphore : Traversée entre continents pour ~1 € seulement.',
-        '🕌 Sainte-Sophie & Mosquée Bleue : Privilégiez les visites tôt le matin.',
-        '☕ Quartiers Balat et Karaköy pour les salons de thé d\'artistes.'
-      ]
-    },
-    santorin: {
-      city: 'Santorin',
-      country: 'Grèce',
-      lat: 36.3932,
-      lon: 25.4615,
-      image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1200&auto=format&fit=crop&q=85',
-      tips: [
-        '🌅 Coucher de soleil à Imerovigli plutôt qu\'à Oia pour le calme absolu.',
-        '🚶 Randonnée Fira-Oia le long de la crête au lever du jour.',
-        '🍷 Dégustation de vins volcaniques blancs locaux.'
-      ]
-    }
-  };
-
-  // 1. Recherche dans le dictionnaire fuzzy local
-  for (const [key, val] of Object.entries(knownDestinations)) {
-    if (q.includes(key) || key.includes(q)) {
-      return {
-        standardizedName: `${val.city}, ${val.country}`,
-        cityName: val.city,
-        countryName: val.country,
-        lat: val.lat,
-        lon: val.lon,
-        coverImage: val.image,
-        travelTips: val.tips
-      };
-    }
-  }
-
-  // 2. Recherche en ligne avec Nominatim (OpenStreetMap gère naturellement les fautes d'orthographe)
-  try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(rawQuery)}&format=json&addressdetails=1&limit=1`);
-    const data = await res.json();
-    if (data && data.length > 0) {
-      const place = data[0];
-      const city = place.address?.city || place.address?.town || place.address?.village || place.address?.municipality || place.name || rawQuery;
-      const country = place.address?.country || 'International';
-      const lat = parseFloat(place.lat);
-      const lon = parseFloat(place.lon);
-      const coverImage = getDestinationCover(`${city} ${country}`);
-
-      return {
-        standardizedName: `${city}, ${country}`,
-        cityName: city,
-        countryName: country,
-        lat,
-        lon,
-        coverImage,
-        travelTips: [
-          `🎟️ Forfaits & Pass Touristiques : Renseignez-vous à l'office de tourisme de ${city} pour économiser jusqu'à 30% sur les entrées.`,
-          `🍽️ Bonnes adresses locales : Choisissez des restaurants en retrait des axes touristiques pour un meilleur rapport qualité/prix.`,
-          `🚇 Transports en commun : Privilégiez les forfaits journaliers ou hebdomadaires pour vos déplacements.`
-        ]
-      };
-    }
-  } catch (err) {
-    console.warn('[AI Geocoding] Erreur recherche en ligne, fallback local:', err);
-  }
-
-  // 3. Fallback générique propre
-  const fallbackCover = getDestinationCover(rawQuery);
-  return {
-    standardizedName: rawQuery,
-    cityName: rawQuery.split(',')[0].trim(),
-    countryName: rawQuery.includes(',') ? rawQuery.split(',')[1].trim() : 'International',
-    lat: 41.3851,
-    lon: 2.1734,
-    coverImage: fallbackCover,
-    travelTips: [
-      '🎟️ Réservez vos principales activités en ligne pour bénéficier de réductions anticipées.',
-      '🍽️ Privilégiez les tables fréquentées par les résidents locaux pour une immersion authentique.',
-      '💡 Consultez les horaires des visites gratuites dans les musées de la ville.'
-    ]
-  };
-};
-
 export const TripsView: React.FC = () => {
-  const { trips, activeTrip, setActiveTripId, addTrip, updateTrip, deleteTrip } = useTrips();
-  const { currentUser } = useAuth();
+  const { 
+    trips, 
+    activeTrip, 
+    setActiveTripId, 
+    addTrip, 
+    updateTrip, 
+    deleteTrip, 
+    duplicateTrip,
+    joinTripByCode 
+  } = useTrips();
+  const { currentUser, allUsers } = useAuth();
   const { currency: userCurrency, format, convert } = useAppCurrency();
   const canManageTrips = currentUser?.role === 'Admin' || currentUser?.role === 'Organizer';
 
+  // Filters & Modals
   const [tripFilter, setTripFilter] = useState<'all' | 'upcoming' | 'past'>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isGeneratorModalOpen, setIsGeneratorModalOpen] = useState(false);
-  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [joinFeedback, setJoinFeedback] = useState<string | null>(null);
 
-  // Form states
+  // Packing List Modal State
+  const [packingModalTrip, setPackingModalTrip] = useState<Trip | null>(null);
+  const [selectedPackingCategory, setSelectedPackingCategory] = useState<string>('all');
+  const [newPackingLabel, setNewPackingLabel] = useState('');
+  const [newPackingCat, setNewPackingCat] = useState<PackingCategory>('Vêtements');
+
+  // Documents Vault Modal State
+  const [docsModalTrip, setDocsModalTrip] = useState<Trip | null>(null);
+  const [newDocTitle, setNewDocTitle] = useState('');
+  const [newDocCategory, setNewDocCategory] = useState<TravelDocCategory>('Vol / Billet');
+  const [newDocCode, setNewDocCode] = useState('');
+  const [newDocNotes, setNewDocNotes] = useState('');
+  const [newDocFileUrl, setNewDocFileUrl] = useState('');
+
+  // Editing Trip
+  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+  const [copiedShareCode, setCopiedShareCode] = useState<string | null>(null);
+
+  // Form states for manual create/edit
   const [title, setTitle] = useState('');
   const [destination, setDestination] = useState('');
   const [country, setCountry] = useState('');
@@ -234,26 +113,89 @@ export const TripsView: React.FC = () => {
   const [budgetTotal, setBudgetTotal] = useState(1500);
   const [currency, setCurrency] = useState('EUR');
   const [status, setStatus] = useState<TripStatus>('Planifié');
-  const [participantsText, setParticipantsText] = useState('Moi');
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  const [extraParticipantText, setExtraParticipantText] = useState('');
 
-  // Generator states
-  const [genDestination, setGenDestination] = useState('Barcelone, Espagne');
+  // AI Generator States
+  const [genDestination, setGenDestination] = useState('Djerba, Tunisie');
   const [genDays, setGenDays] = useState(4);
+  const [genStartDate, setGenStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [genPace, setGenPace] = useState<'Relaxed' | 'Balanced' | 'Intense'>('Balanced');
-  const [genTheme, setGenTheme] = useState('Culture & Gastronomie');
+  const [genTheme, setGenTheme] = useState('Culture & Histoire');
+  const [genBudgetTier, setGenBudgetTier] = useState<'Économique' | 'Équilibré' | 'Confort'>('Équilibré');
+  const [genGroupType, setGenGroupType] = useState<'Solo' | 'Couple' | 'Amis' | 'Famille'>('Couple');
+  const [genParticipants, setGenParticipants] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationStep, setGenerationStep] = useState<string>('');
+
+  const isPastTrip = (t: Trip) => t.status === 'Terminé' || (t.endDate ? new Date(t.endDate) < new Date() : false);
+  const pastTrips = trips.filter(isPastTrip);
+  const upcomingTrips = trips.filter(t => !isPastTrip(t));
+  const displayedTrips = tripFilter === 'all' 
+    ? trips 
+    : tripFilter === 'past' 
+    ? pastTrips 
+    : upcomingTrips;
+
+  // Lifecycle & Countdown Helper
+  const getTripCountdownBadge = (trip: Trip) => {
+    if (trip.status === 'Terminé' || isPastTrip(trip)) {
+      return {
+        label: '🏛️ Historique Passé',
+        className: 'bg-purple-950/80 text-purple-300 border-purple-600/40'
+      };
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = new Date(trip.startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(trip.endDate);
+    end.setHours(23, 59, 59, 999);
+
+    if (today >= start && today <= end) {
+      const currentDay = Math.min(
+        Math.ceil((end.getTime() - start.getTime()) / 86400000),
+        Math.max(1, Math.floor((today.getTime() - start.getTime()) / 86400000) + 1)
+      );
+      const totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
+      return {
+        label: `🟢 En direct • Jour ${currentDay}/${totalDays}`,
+        className: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 animate-pulse'
+      };
+    }
+
+    if (today < start) {
+      const diffDays = Math.ceil((start.getTime() - today.getTime()) / 86400000);
+      return {
+        label: `⏳ J-${diffDays} avant départ`,
+        className: 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+      };
+    }
+
+    return {
+      label: 'Planifié',
+      className: 'bg-sky-950/80 text-sky-300 border-sky-500/40'
+    };
+  };
+
+  const copyShareCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedShareCode(code);
+    setTimeout(() => setCopiedShareCode(null), 2500);
+  };
 
   const resetForm = () => {
     setTitle('');
     setDestination('');
     setCountry('');
-    setStartDate('');
-    setEndDate('');
+    setStartDate(new Date().toISOString().split('T')[0]);
+    setEndDate(new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0]);
     setCoverImage('');
     setBudgetTotal(1500);
     setCurrency(currentUser?.preferences.currency || 'EUR');
     setStatus('Planifié');
-    setParticipantsText(currentUser?.name || '');
+    setSelectedParticipants(currentUser ? [currentUser.name] : ['Moi']);
+    setExtraParticipantText('');
     setEditingTrip(null);
   };
 
@@ -273,8 +215,15 @@ export const TripsView: React.FC = () => {
     setBudgetTotal(trip.budgetTotal);
     setCurrency(trip.currency);
     setStatus(trip.status);
-    setParticipantsText(trip.participants.join(', '));
+    setSelectedParticipants(trip.participants || []);
+    setExtraParticipantText('');
     setIsCreateModalOpen(true);
+  };
+
+  const handleToggleParticipant = (name: string) => {
+    setSelectedParticipants(prev => 
+      prev.includes(name) ? prev.filter(p => p !== name) : [...prev, name]
+    );
   };
 
   const handleSaveTrip = async (e: React.FormEvent) => {
@@ -283,8 +232,12 @@ export const TripsView: React.FC = () => {
       alert("Action refusée : Seuls les Organisateurs et Administrateurs sont autorisés à créer des voyages.");
       return;
     }
-    const participants = participantsText.split(',').map(p => p.trim()).filter(Boolean);
-    const defaultCover = 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&auto=format&fit=crop&q=80';
+
+    const extra = extraParticipantText.split(',').map(p => p.trim()).filter(Boolean);
+    const combinedParticipants = Array.from(new Set([...selectedParticipants, ...extra]));
+    const finalParticipants = combinedParticipants.length > 0 ? combinedParticipants : [currentUser?.name || 'Moi'];
+    const finalCover = coverImage || getDestinationCover(destination);
+    const finalShareCode = editingTrip?.shareCode || 'TRIP-' + Math.random().toString(36).substring(2, 6).toUpperCase();
 
     if (editingTrip) {
       await updateTrip(editingTrip.id, {
@@ -293,25 +246,28 @@ export const TripsView: React.FC = () => {
         country,
         startDate,
         endDate,
-        coverImage: coverImage || editingTrip.coverImage,
+        coverImage: finalCover,
         budgetTotal,
         currency,
         status,
-        participants
+        participants: finalParticipants
       });
     } else {
       await addTrip({
         userId: currentUser?.id || 'usr-default',
         title,
         destination,
-        country,
+        country: country || (destination.includes(',') ? destination.split(',')[1].trim() : 'International'),
         startDate: startDate || new Date().toISOString().split('T')[0],
-        endDate: endDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-        coverImage: coverImage || defaultCover,
+        endDate: endDate || new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0],
+        coverImage: finalCover,
         budgetTotal,
         currency,
         status,
-        participants: participants.length > 0 ? participants : [currentUser?.name || 'Moi']
+        participants: finalParticipants,
+        shareCode: finalShareCode,
+        packingList: [],
+        travelDocs: []
       });
     }
 
@@ -319,249 +275,217 @@ export const TripsView: React.FC = () => {
     resetForm();
   };
 
-  // Advanced feature: AI Smart Itinerary Generation
+  // SUPERCHARGED AI GENERATOR V2
   const handleAutoGenerateItinerary = async () => {
     if (!canManageTrips) {
-      alert("Action refusée : Seuls les Organisateurs et Administrateurs sont autorisés à générer des voyages.");
+      alert("Action refusée : La génération d'itinéraires IA est réservée aux Organisateurs et Administrateurs.");
       return;
     }
     setIsGenerating(true);
-    
-    // 1. Résolution IA de la destination : correction des fautes, coordonnées GPS exactes & photo sublime
-    const resolved = await resolveDestinationWithAI(genDestination);
+    setGenerationStep('🔍 Détection intelligente & géocodage de la destination...');
 
-    const start = new Date();
-    const end = new Date(Date.now() + genDays * 86400000);
-    const cityName = resolved.cityName;
-    const countryName = resolved.countryName;
-    const baseLat = resolved.lat;
-    const baseLon = resolved.lon;
+    try {
+      await new Promise(r => setTimeout(r, 400));
+      setGenerationStep('🏛️ Sélection des meilleurs points d’intérêt & calcul GPS...');
 
-    const newTrip = await addTrip({
-      userId: currentUser?.id || 'usr-default',
-      title: `Escapade ${genTheme} à ${resolved.standardizedName}`,
-      destination: resolved.standardizedName,
-      country: countryName,
-      startDate: start.toISOString().split('T')[0],
-      endDate: end.toISOString().split('T')[0],
-      coverImage: resolved.coverImage,
-      budgetTotal: 1500, // Mis à jour précisément après le calcul des activités
-      currency: currentUser?.preferences.currency || 'EUR',
-      status: 'Planifié',
-      participants: [currentUser?.name || 'Moi', 'Compagnon de voyage'],
-      itinerarySummary: `Circuit ${genTheme} organisé par l'IA sur ${genDays} jours à ${resolved.standardizedName} (rythme ${genPace}). Les meilleurs lieux ont été ajoutés sur la carte et ordonnés dans le planning journalier avec détection des meilleurs plans.`,
-      notes: `💡 MEILLEURS PLANS & ASTUCES ÉCONOMIQUES IA :\n` + resolved.travelTips.join('\n')
-    });
-
-    const themePool = [
-      {
-        titleSuffix: `Centre Historique & Patrimoine`,
-        category: 'Monuments' as const,
-        cost: 15,
-        duration: 120,
-        image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&auto=format&fit=crop&q=80',
-        desc: `Immersion culturelle dans les plus beaux monuments historiques de ${cityName}.`
-      },
-      {
-        titleSuffix: `Saveurs & Gastronomie Locale`,
-        category: 'Restaurant' as const,
-        cost: 30,
-        duration: 90,
-        image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
-        desc: `Pause culinaire gourmande : dégustation de spécialités du terroir de ${cityName}.`
-      },
-      {
-        titleSuffix: `Grand Musée d'Art & Culture`,
-        category: 'Monuments' as const,
-        cost: 20,
-        duration: 120,
-        image: 'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=600&auto=format&fit=crop&q=80',
-        desc: `Visite guidée des chefs-d’œuvre incontournables et expositions renommées.`
-      },
-      {
-        titleSuffix: `Marché Typique & Artisans`,
-        category: 'Shopping' as const,
-        cost: 25,
-        duration: 90,
-        image: 'https://images.unsplash.com/photo-1534604973900-c43ab4c2e0ab?w=600&auto=format&fit=crop&q=80',
-        desc: `Balade au marché coloré pour dénicher produits régionaux et créations artisanales de ${cityName}.`
-      },
-      {
-        titleSuffix: `Parc & Belvédère Panoramique`,
-        category: 'Nature' as const,
-        cost: 0,
-        duration: 90,
-        image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
-        desc: `Moment de détente en plein air avec une vue imprenable sur ${cityName}.`
-      },
-      {
-        titleSuffix: `Dîner Chaleureux & Ambiance Nocturne`,
-        category: 'Restaurant' as const,
-        cost: 35,
-        duration: 120,
-        image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80',
-        desc: `Dîner dans une table réputée de ${cityName} pour son hospitalité et sa cuisine d'auteur.`
-      }
-    ];
-
-    const activitiesPerDay = genPace === 'Relaxed' ? 2 : genPace === 'Balanced' ? 3 : 4;
-    const timeSlots = [
-      { start: '09:30', end: '11:30' },
-      { start: '12:00', end: '13:30' },
-      { start: '14:30', end: '17:00' },
-      { start: '18:30', end: '20:30' }
-    ];
-
-    const generatedPlaces: Place[] = [];
-    const generatedActivities: Activity[] = [];
-
-    // Génération dynamique pour CHAQUE jour du séjour selon genDays
-    for (let day = 1; day <= genDays; day++) {
-      const dayDate = new Date(start.getTime() + (day - 1) * 86400000).toISOString().split('T')[0];
-
-      for (let step = 0; step < activitiesPerDay; step++) {
-        const poolIndex = ((day - 1) * activitiesPerDay + step) % themePool.length;
-        const item = themePool[poolIndex];
-        const slot = timeSlots[step % timeSlots.length];
-
-        const placeId = `plc-gen-${day}-${step + 1}-${Date.now()}`;
-        const actId = `act-gen-${day}-${step + 1}-${Date.now()}`;
-
-        // Répartition géographique réelle autour des coordonnées GPS de la destination
-        const angle = (day * activitiesPerDay + step) * 1.25;
-        const distOffset = 0.005 + (step * 0.003) + (day * 0.002);
-
-        generatedPlaces.push({
-          id: placeId,
-          tripId: newTrip.id,
-          name: `${item.titleSuffix} (${cityName})`,
-          category: item.category,
-          address: `Secteur Jour ${day}, ${resolved.standardizedName}`,
-          latitude: baseLat + Math.sin(angle) * distOffset,
-          longitude: baseLon + Math.cos(angle) * distOffset,
-          rating: Number((4.6 + Math.random() * 0.35).toFixed(1)),
-          estimatedDurationMinutes: item.duration,
-          costEstimate: item.cost,
-          imageUrl: item.image,
-          notes: `Lieu sélectionné par l'IA pour le Jour ${day} (${genTheme}).`,
-          createdAt: new Date().toISOString()
-        });
-
-        // L'activité s'appuie directement sur le lieu créé et sélectionné
-        generatedActivities.push({
-          id: actId,
-          tripId: newTrip.id,
-          placeId: placeId,
-          dayNumber: day,
-          date: dayDate,
-          startTime: slot.start,
-          endTime: slot.end,
-          title: `${item.titleSuffix} – ${cityName}`,
-          description: item.desc,
-          cost: item.cost,
-          status: 'À faire',
-          orderIndex: step,
-          createdAt: new Date().toISOString()
-        });
-      }
-    }
-
-    await db.places.bulkAdd(generatedPlaces);
-    await db.activities.bulkAdd(generatedActivities);
-
-    // Initialiser le budget directement à partir des activités générées par l'IA
-    const generatedExpenses: Expense[] = [];
-
-    // Dépenses prévisionnelles pour chaque activité payante du planning
-    generatedActivities
-      .filter(act => act.cost > 0)
-      .forEach((act, idx) => {
-        generatedExpenses.push({
-          id: `exp-gen-act-${idx}-${Date.now()}`,
-          tripId: newTrip.id,
-          title: `Activité : ${act.title}`,
-          category: act.title.includes('Saveurs') || act.title.includes('Dîner') ? 'Nourriture' : 'Activités',
-          amount: act.cost,
-          currency: newTrip.currency,
-          date: act.date,
-          paidBy: currentUser?.name || 'Moi',
-          splitWith: newTrip.participants,
-          notes: 'Dépense prévisionnelle issue directement du planning IA',
-          createdAt: new Date().toISOString()
-        });
+      const result = await generateFullSmartTrip({
+        destinationQuery: genDestination,
+        days: genDays,
+        pace: genPace,
+        theme: genTheme,
+        budgetTier: genBudgetTier,
+        groupType: genGroupType,
+        userId: currentUser?.id || 'usr-default',
+        userName: currentUser?.name || 'Moi',
+        userCurrency: currentUser?.preferences.currency || 'EUR',
+        selectedParticipants: genParticipants.length > 0 ? genParticipants : [currentUser?.name || 'Moi'],
+        customStartDate: genStartDate
       });
 
-    // Estimation Hébergement et Transport basée sur les jours du séjour
-    const lodgingTotal = genDays * 90;
-    const transportTotal = 150;
+      setGenerationStep('📅 Agencement du planning journalier sans chevauchement...');
+      await new Promise(r => setTimeout(r, 400));
 
-    generatedExpenses.push({
-      id: `exp-gen-lodging-${Date.now()}`,
-      tripId: newTrip.id,
-      title: `Hébergement (${genDays} nuits)`,
-      category: 'Hébergement',
-      amount: lodgingTotal,
-      currency: newTrip.currency,
-      date: start.toISOString().split('T')[0],
-      paidBy: currentUser?.name || 'Moi',
-      splitWith: newTrip.participants,
-      notes: `Hébergement estimé pour ${genDays} jours de visite`,
-      createdAt: new Date().toISOString()
-    });
+      setGenerationStep('🎒 Préparation du trousseau intelligent & du budget prévisionnel...');
+      const createdTrip = await addTrip(result.trip);
 
-    generatedExpenses.push({
-      id: `exp-gen-transp-${Date.now()}`,
-      tripId: newTrip.id,
-      title: `Transport aller-retour (${cityName})`,
-      category: 'Transport',
-      amount: transportTotal,
-      currency: newTrip.currency,
-      date: start.toISOString().split('T')[0],
-      paidBy: currentUser?.name || 'Moi',
-      splitWith: newTrip.participants,
-      notes: 'Billet de transport / vol estimé',
-      createdAt: new Date().toISOString()
-    });
+      // Save generated places linked to new trip
+      const placesWithTripId = result.places.map((p, idx) => ({
+        ...p,
+        id: `plc-ai-${createdTrip.id}-${idx + 1}-${Date.now()}`,
+        tripId: createdTrip.id,
+        createdAt: new Date().toISOString()
+      }));
 
-    await db.expenses.bulkAdd(generatedExpenses);
+      // Map place names to their newly generated IDs for activities
+      const placeMap: Record<string, string> = {};
+      placesWithTripId.forEach(p => {
+        placeMap[p.name] = p.id;
+      });
 
-    // Synchroniser immédiatement les lieux, le planning et le budget vers MongoDB
-    await Promise.all([
-      fetch('/api/places', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(generatedPlaces)
-      }).catch(err => console.warn('[AI Trips] Sync places MongoDB fallback', err)),
-      fetch('/api/activities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(generatedActivities)
-      }).catch(err => console.warn('[AI Trips] Sync activities MongoDB fallback', err)),
-      fetch('/api/expenses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(generatedExpenses)
-      }).catch(err => console.warn('[AI Trips] Sync expenses MongoDB fallback', err))
-    ]);
+      const activitiesWithTripId = result.activities.map((a, idx) => ({
+        ...a,
+        id: `act-ai-${createdTrip.id}-${idx + 1}-${Date.now()}`,
+        tripId: createdTrip.id,
+        placeId: placeMap[a.title] || placesWithTripId[0]?.id,
+        createdAt: new Date().toISOString()
+      }));
 
-    // Calcul du budget total exact du voyage = Somme des activités du planning + Hébergement + Transport + Marge sécurité
-    const totalActivitiesCost = generatedActivities.reduce((sum, a) => sum + (a.cost || 0), 0);
-    const calculatedBudgetTotal = Math.round((totalActivitiesCost + lodgingTotal + transportTotal) * 1.15);
-    await updateTrip(newTrip.id, { budgetTotal: calculatedBudgetTotal });
+      const expensesWithTripId = result.expenses.map((e, idx) => ({
+        ...e,
+        id: `exp-ai-${createdTrip.id}-${idx + 1}-${Date.now()}`,
+        tripId: createdTrip.id,
+        createdAt: new Date().toISOString()
+      }));
 
-    setIsGenerating(false);
-    setIsGeneratorModalOpen(false);
-    setActiveTripId(newTrip.id);
+      await db.places.bulkAdd(placesWithTripId);
+      await db.activities.bulkAdd(activitiesWithTripId);
+      await db.expenses.bulkAdd(expensesWithTripId);
+
+      // Sync to MongoDB in background
+      Promise.all([
+        fetch('/api/places', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(placesWithTripId)
+        }),
+        fetch('/api/activities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(activitiesWithTripId)
+        }),
+        fetch('/api/expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(expensesWithTripId)
+        })
+      ]).catch(err => console.warn('[AI Trips] Sync MongoDB fallback', err));
+
+      setActiveTripId(createdTrip.id);
+      setIsGeneratorModalOpen(false);
+    } catch (err) {
+      console.error('Erreur lors de la génération IA:', err);
+      alert("Une erreur est survenue lors de la génération. Veuillez réessayer.");
+    } finally {
+      setIsGenerating(false);
+      setGenerationStep('');
+    }
   };
 
-  const isPastTrip = (t: Trip) => t.status === 'Terminé' || new Date(t.endDate) < new Date();
-  const pastTrips = trips.filter(isPastTrip);
-  const upcomingTrips = trips.filter(t => !isPastTrip(t));
-  const displayedTrips = tripFilter === 'all' 
-    ? trips 
-    : tripFilter === 'past' 
-    ? pastTrips 
-    : upcomingTrips;
+  const handleJoinTripSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinCodeInput.trim()) return;
+    setJoinFeedback(null);
+    const res = await joinTripByCode(joinCodeInput.trim());
+    if (res.success) {
+      setJoinFeedback(res.message);
+      setTimeout(() => {
+        setIsJoinModalOpen(false);
+        setJoinCodeInput('');
+        setJoinFeedback(null);
+      }, 1500);
+    } else {
+      setJoinFeedback(res.message);
+    }
+  };
+
+  // Packing List actions
+  const handleTogglePackItem = async (trip: Trip, itemId: string) => {
+    const currentList = trip.packingList || [];
+    const updated = currentList.map(item => 
+      item.id === itemId ? { ...item, isPacked: !item.isPacked } : item
+    );
+    await updateTrip(trip.id, { packingList: updated });
+    setPackingModalTrip(prev => prev ? { ...prev, packingList: updated } : null);
+  };
+
+  const handleAddPackItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!packingModalTrip || !newPackingLabel.trim()) return;
+    const newItem: PackingItem = {
+      id: `pack-${Date.now()}`,
+      label: newPackingLabel.trim(),
+      category: newPackingCat,
+      isPacked: false,
+      assignedTo: currentUser?.name
+    };
+    const updated = [...(packingModalTrip.packingList || []), newItem];
+    await updateTrip(packingModalTrip.id, { packingList: updated });
+    setPackingModalTrip(prev => prev ? { ...prev, packingList: updated } : null);
+    setNewPackingLabel('');
+  };
+
+  const handleDeletePackItem = async (trip: Trip, itemId: string) => {
+    const updated = (trip.packingList || []).filter(item => item.id !== itemId);
+    await updateTrip(trip.id, { packingList: updated });
+    setPackingModalTrip(prev => prev ? { ...prev, packingList: updated } : null);
+  };
+
+  const handleRegeneratePackingList = async (trip: Trip) => {
+    const dest = await resolveDestinationIntelligence(trip.destination);
+    const days = Math.max(2, Math.ceil((new Date(trip.endDate).getTime() - new Date(trip.startDate).getTime()) / 86400000));
+    const generated = generateSmartPackingList(dest, days, trip.title);
+    await updateTrip(trip.id, { packingList: generated });
+    setPackingModalTrip(prev => prev ? { ...prev, packingList: generated } : null);
+  };
+
+  // Travel Documents actions
+  const handleAddDocSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!docsModalTrip || !newDocTitle.trim()) return;
+    const newDoc: TravelDoc = {
+      id: `doc-${Date.now()}`,
+      title: newDocTitle.trim(),
+      category: newDocCategory,
+      referenceCode: newDocCode.trim() || undefined,
+      notes: newDocNotes.trim() || undefined,
+      fileUrl: newDocFileUrl || undefined,
+      uploadedAt: new Date().toISOString()
+    };
+    const updated = [...(docsModalTrip.travelDocs || []), newDoc];
+    await updateTrip(docsModalTrip.id, { travelDocs: updated });
+    setDocsModalTrip(prev => prev ? { ...prev, travelDocs: updated } : null);
+    setNewDocTitle('');
+    setNewDocCode('');
+    setNewDocNotes('');
+    setNewDocFileUrl('');
+  };
+
+  const handleDeleteDoc = async (trip: Trip, docId: string) => {
+    const updated = (trip.travelDocs || []).filter(d => d.id !== docId);
+    await updateTrip(trip.id, { travelDocs: updated });
+    setDocsModalTrip(prev => prev ? { ...prev, travelDocs: updated } : null);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setNewDocFileUrl(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Export handlers
+  const handleExportIcs = async (trip: Trip) => {
+    const acts = await db.activities.where('tripId').equals(trip.id).toArray();
+    exportTripToIcs(trip, acts);
+  };
+
+  const handlePrintRoadbook = async (trip: Trip) => {
+    const [places, acts, exps] = await Promise.all([
+      db.places.where('tripId').equals(trip.id).toArray(),
+      db.activities.where('tripId').equals(trip.id).toArray(),
+      db.expenses.where('tripId').equals(trip.id).toArray()
+    ]);
+    printTripRoadbook(trip, places, acts, exps, userCurrency);
+  };
+
+  const handleDuplicate = async (trip: Trip) => {
+    if (confirm(`Dupliquer le voyage "${trip.title}" et toutes ses étapes ?`)) {
+      await duplicateTrip(trip.id);
+    }
+  };
 
   const handleToggleCompleted = async (trip: Trip) => {
     const newStatus: TripStatus = trip.status === 'Terminé' ? 'En cours' : 'Terminé';
@@ -570,50 +494,64 @@ export const TripsView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header with Member Badge */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 shadow-sm">
-        <div className="flex items-center space-x-3">
-          <div className="p-3 bg-brand-500/10 text-brand-400 rounded-xl border border-brand-500/20">
-            <Compass className="w-6 h-6" />
+      {/* Top Banner / Actions Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 shadow-md">
+        <div className="flex items-center space-x-3.5">
+          <div className="p-3 bg-gradient-to-tr from-brand-600 to-amber-500 text-white rounded-xl shadow-lg shadow-brand-500/20">
+            <Compass className="w-6 h-6 animate-[spin_20s_linear_infinite]" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
               <h2 className="text-xl font-bold text-white">Voyages & Itinéraires</h2>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                IA V2 Active
+              </span>
             </div>
-            <p className="text-sm text-slate-400 mt-0.5">
-              Gestion complète des séjours et générateur intelligent d'itinéraires sur-mesure.
+            <p className="text-xs text-slate-400 mt-0.5">
+              Générateur intelligent d'itinéraires sur-mesure, trousseau de valise IA, export agenda & documents hors-ligne.
             </p>
           </div>
         </div>
 
-        {canManageTrips ? (
-          <div className="flex items-center space-x-2 self-start sm:self-auto">
-            <button
-              onClick={() => setIsGeneratorModalOpen(true)}
-              className="flex items-center space-x-2 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-extrabold rounded-xl shadow-lg shadow-amber-500/20 transition-all transform hover:-translate-y-0.5"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Générer Itinéraire IA</span>
-            </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Join with code button */}
+          <button
+            onClick={() => setIsJoinModalOpen(true)}
+            className="flex items-center space-x-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors shadow-sm"
+          >
+            <Share2 className="w-4 h-4 text-brand-400" />
+            <span>Rejoindre avec un Code</span>
+          </button>
 
-            <button
-              onClick={handleOpenCreate}
-              className="flex items-center space-x-2 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-500/25 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Nouveau Voyage</span>
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center space-x-2 px-3.5 py-2 bg-slate-800/80 rounded-xl border border-slate-700 text-xs text-slate-300 self-start sm:self-auto">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Rôle Voyageur : Consultation & Choix du séjour</span>
-          </div>
-        )}
+          {canManageTrips ? (
+            <>
+              <button
+                onClick={() => setIsGeneratorModalOpen(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 text-xs font-extrabold rounded-xl shadow-lg shadow-amber-500/25 transition-all transform hover:-translate-y-0.5"
+              >
+                <Sparkles className="w-4 h-4 text-slate-950" />
+                <span>Générer Itinéraire IA V2</span>
+              </button>
+
+              <button
+                onClick={handleOpenCreate}
+                className="flex items-center space-x-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-500/25 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nouveau Voyage</span>
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center space-x-2 px-3.5 py-2 bg-slate-800/80 rounded-xl border border-slate-700 text-xs text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>Rôle Voyageur : Consultation & Choix</span>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Trips Filter Bar (All / Upcoming / Past History) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-2">
+      {/* Trips Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setTripFilter('all')}
@@ -643,8 +581,16 @@ export const TripsView: React.FC = () => {
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
-            🏛️ Historique des voyages passés ({pastTrips.length})
+            🏛️ Historique Passé ({pastTrips.length})
           </button>
+        </div>
+
+        <div className="text-[11px] text-slate-400 hidden sm:block">
+          {activeTrip ? (
+            <span>Voyage actif : <strong className="text-white">{activeTrip.title}</strong></span>
+          ) : (
+            <span>Sélectionnez un voyage ci-dessous pour l'activer</span>
+          )}
         </div>
       </div>
 
@@ -653,160 +599,260 @@ export const TripsView: React.FC = () => {
         {displayedTrips.map(trip => {
           const isActive = activeTrip?.id === trip.id;
           const isPast = isPastTrip(trip);
+          const countdown = getTripCountdownBadge(trip);
+          const packingCount = trip.packingList?.length || 0;
+          const packedCount = trip.packingList?.filter(i => i.isPacked).length || 0;
+          const docsCount = trip.travelDocs?.length || 0;
+
           return (
             <div
               key={trip.id}
-              className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 ${
+              className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 flex flex-col justify-between ${
                 isActive
-                  ? 'border-brand-500 shadow-xl shadow-brand-500/10 bg-slate-900 ring-1 ring-brand-500/50'
+                  ? 'border-brand-500 shadow-xl shadow-brand-500/15 bg-slate-900 ring-1 ring-brand-500/40'
                   : 'border-slate-800 bg-slate-900/80 hover:border-slate-700 hover:shadow-lg'
               }`}
             >
-              {/* Cover Image & Status Badge */}
-              <div className="relative h-44 w-full overflow-hidden bg-slate-950">
-                <img
-                  src={trip.coverImage}
-                  alt={trip.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
-                
-                {/* Status pill */}
-                <div className="absolute top-3 left-3 flex items-center space-x-1.5">
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md ${
-                      trip.status === 'En cours'
-                        ? 'bg-emerald-500/80 text-white border border-emerald-400/40'
-                        : trip.status === 'Planifié'
-                        ? 'bg-sky-500/80 text-white border border-sky-400/40'
-                        : trip.status === 'Terminé'
-                        ? 'bg-purple-600/80 text-white border border-purple-400/50'
-                        : 'bg-amber-500/80 text-slate-950'
-                    }`}
-                  >
-                    {trip.status}
-                  </span>
-                  {isPast && trip.status !== 'Terminé' && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-950/80 text-purple-300 border border-purple-500/40 backdrop-blur-md">
-                      Passé
+              <div>
+                {/* Cover Image & Badges */}
+                <div className="relative h-48 w-full overflow-hidden bg-slate-950">
+                  <img
+                    src={trip.coverImage}
+                    alt={trip.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+
+                  {/* Top-left: Status & Countdown pills */}
+                  <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold backdrop-blur-md shadow-sm border ${
+                        trip.status === 'En cours'
+                          ? 'bg-emerald-500/90 text-white border-emerald-400/50'
+                          : trip.status === 'Planifié'
+                          ? 'bg-sky-500/90 text-white border-sky-400/50'
+                          : trip.status === 'Terminé'
+                          ? 'bg-purple-600/90 text-white border-purple-400/50'
+                          : 'bg-amber-500/90 text-slate-950 border-amber-400/50'
+                      }`}
+                    >
+                      {trip.status}
                     </span>
-                  )}
+
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border backdrop-blur-md shadow-sm ${countdown.className}`}>
+                      {countdown.label}
+                    </span>
+                  </div>
+
+                  {/* Top-right: Active trip indicator & Share code button */}
+                  <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
+                    {isActive && (
+                      <div className="bg-brand-500 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center space-x-1 shadow-md">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Actif</span>
+                      </div>
+                    )}
+
+                    {trip.shareCode && (
+                      <button
+                        onClick={() => copyShareCode(trip.shareCode!)}
+                        className="px-2 py-0.5 bg-slate-950/80 hover:bg-slate-900 border border-slate-700/80 rounded-lg text-[10px] text-slate-300 font-mono flex items-center space-x-1 backdrop-blur-md transition-colors"
+                        title="Cliquer pour copier le code de partage du voyage"
+                      >
+                        {copiedShareCode === trip.shareCode ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400 font-bold">Copié !</span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="w-3 h-3 text-amber-400" />
+                            <span>{trip.shareCode}</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Destination overlay text */}
+                  <div className="absolute bottom-3 left-4 right-4">
+                    <div className="flex items-center space-x-1 text-xs text-brand-300 font-semibold mb-0.5">
+                      <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">{trip.destination} • {trip.country}</span>
+                    </div>
+                    <h3 className="text-base font-bold text-white truncate drop-shadow-md">{trip.title}</h3>
+                  </div>
                 </div>
 
-                {/* Active Trip Indicator */}
-                {isActive && (
-                  <div className="absolute top-3 right-3 bg-brand-500 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center space-x-1 shadow-md">
-                    <CheckCircle2 className="w-3 h-3" />
-                    <span>Voyage Sélectionné</span>
+                {/* Trip Details Body */}
+                <div className="p-4 space-y-3.5">
+                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-300">
+                    <div className="flex items-center space-x-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{trip.startDate}</span>
+                    </div>
+                    <div className="flex items-center space-x-1.5 justify-end">
+                      <DollarSign className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="font-semibold text-white">
+                        {format(convert(trip.budgetTotal, trip.currency), userCurrency)}
+                      </span>
+                    </div>
                   </div>
-                )}
 
-                {/* Country / Destination text overlay */}
-                <div className="absolute bottom-3 left-4 right-4">
-                  <div className="flex items-center space-x-1 text-xs text-brand-300 font-semibold mb-0.5">
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>{trip.destination} • {trip.country}</span>
+                  {/* Participants */}
+                  {trip.participants && trip.participants.length > 0 && (
+                    <div className="flex items-center space-x-1.5 text-xs text-slate-400">
+                      <Users className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                      <span className="truncate">
+                        {trip.participants.slice(0, 3).join(', ')}
+                        {trip.participants.length > 3 && ` +${trip.participants.length - 3}`}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Destination Meta Highlights */}
+                  {trip.destinationMeta && (
+                    <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800 text-[11px] text-slate-300 grid grid-cols-2 gap-1.5">
+                      {trip.destinationMeta.timezone && (
+                        <div className="truncate text-slate-400" title={trip.destinationMeta.timezone}>
+                          ⏰ {trip.destinationMeta.timezone.split(' ')[0]}
+                        </div>
+                      )}
+                      {trip.destinationMeta.emergencyNumbers && (
+                        <div className="truncate text-amber-300" title={`Police: ${trip.destinationMeta.emergencyNumbers.police} | Médical: ${trip.destinationMeta.emergencyNumbers.ambulance}`}>
+                          🚨 Urgence: {trip.destinationMeta.emergencyNumbers.police}
+                        </div>
+                      )}
+                      {trip.destinationMeta.plugType && (
+                        <div className="truncate text-slate-400" title={trip.destinationMeta.plugType}>
+                          🔌 {trip.destinationMeta.plugType.split('(')[0]}
+                        </div>
+                      )}
+                      {trip.destinationMeta.bestMonths && (
+                        <div className="truncate text-emerald-400" title={trip.destinationMeta.bestMonths}>
+                          ☀️ {trip.destinationMeta.bestMonths}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Summary */}
+                  {trip.itinerarySummary && (
+                    <p className="text-xs text-slate-400 line-clamp-2 italic bg-slate-950/40 p-2 rounded-lg border border-slate-800/80">
+                      « {trip.itinerarySummary} »
+                    </p>
+                  )}
+
+                  {/* Feature Quick Badges: Packing & Docs */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => setPackingModalTrip(trip)}
+                      className={`flex-1 flex items-center justify-center space-x-1.5 py-1.5 px-2 rounded-xl border text-[11px] font-semibold transition-colors ${
+                        packingCount > 0 && packedCount === packingCount
+                          ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
+                          : packingCount > 0
+                          ? 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
+                          : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      <Luggage className="w-3.5 h-3.5" />
+                      <span>Valise {packingCount > 0 ? `(${packedCount}/${packingCount})` : ''}</span>
+                    </button>
+
+                    <button
+                      onClick={() => setDocsModalTrip(trip)}
+                      className={`flex-1 flex items-center justify-center space-x-1.5 py-1.5 px-2 rounded-xl border text-[11px] font-semibold transition-colors ${
+                        docsCount > 0
+                          ? 'bg-sky-500/10 text-sky-300 border-sky-500/30 hover:bg-sky-500/20'
+                          : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Documents {docsCount > 0 ? `(${docsCount})` : ''}</span>
+                    </button>
                   </div>
-                  <h3 className="text-base font-bold text-white truncate drop-shadow-sm">{trip.title}</h3>
                 </div>
               </div>
 
-              {/* Trip details */}
-              <div className="p-4 space-y-4">
-                <div className="grid grid-cols-2 gap-2 text-xs text-slate-300">
-                  <div className="flex items-center space-x-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{trip.startDate}</span>
-                  </div>
-                  <div className="flex items-center space-x-1.5 justify-end">
-                    <DollarSign className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="font-semibold text-white">
-                      {format(convert(trip.budgetTotal, trip.currency), userCurrency)}
+              {/* Bottom Actions Footer */}
+              <div className="p-4 pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
+                <div className="flex items-center space-x-1.5">
+                  {!isPast ? (
+                    <button
+                      onClick={() => setActiveTripId(trip.id)}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1 transition-colors ${
+                        isActive
+                          ? 'bg-brand-500/20 text-brand-300'
+                          : 'bg-slate-800 hover:bg-brand-600 hover:text-white text-slate-300'
+                      }`}
+                    >
+                      <span>{isActive ? 'Actif' : 'Sélectionner'}</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-medium text-slate-500 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                      Archivé
                     </span>
-                    {trip.currency !== userCurrency && (
-                      <span className="text-[10px] text-slate-500 font-normal">
-                        ({trip.budgetTotal} {trip.currency})
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {trip.participants && trip.participants.length > 0 && (
-                  <div className="flex items-center space-x-1.5 text-xs text-slate-400">
-                    <Users className="w-3.5 h-3.5 text-slate-500" />
-                    <span className="truncate">
-                      {trip.participants.slice(0, 3).join(', ')}
-                      {trip.participants.length > 3 && ` +${trip.participants.length - 3}`}
-                    </span>
-                  </div>
-                )}
-
-                {trip.itinerarySummary && (
-                  <p className="text-xs text-slate-400 line-clamp-2 italic bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                    « {trip.itinerarySummary} »
-                  </p>
-                )}
-
-                {trip.notes && trip.notes.includes('MEILLEURS PLANS') && (
-                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 space-y-1">
-                    <div className="flex items-center space-x-1.5 font-bold text-amber-300">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                      <span>Meilleurs Plans & Astuces Économiques IA :</span>
-                    </div>
-                    <div className="whitespace-pre-line text-[10px] text-slate-300 leading-relaxed max-h-24 overflow-y-auto">
-                      {trip.notes.replace('💡 MEILLEURS PLANS & ASTUCES ÉCONOMIQUES IA :\n', '')}
-                    </div>
-                  </div>
-                )}
-
-                {/* Action buttons */}
-                <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-                  <div className="flex items-center space-x-2">
-                    {!isPast ? (
-                      <button
-                        onClick={() => setActiveTripId(trip.id)}
-                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1 transition-colors ${
-                          isActive
-                            ? 'bg-brand-500/20 text-brand-400'
-                            : 'bg-slate-800 hover:bg-brand-600 hover:text-white text-slate-300'
-                        }`}
-                      >
-                        <span>{isActive ? 'Actif' : 'Sélectionner'}</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    ) : (
-                      <span className="text-[11px] font-medium text-slate-500 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
-                        Voyage Passé (Archivé)
-                      </span>
-                    )}
-
-                    {canManageTrips && (
-                      <button
-                        onClick={() => handleToggleCompleted(trip)}
-                        className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
-                          trip.status === 'Terminé'
-                            ? 'bg-purple-500/10 text-purple-300 border-purple-500/30 hover:bg-purple-500/20'
-                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                        }`}
-                        title={trip.status === 'Terminé' ? 'Voyage terminé (cliquez pour réactiver)' : 'Marquer comme terminé dans l\'historique'}
-                      >
-                        {trip.status === 'Terminé' ? '✓ Terminé' : 'Terminer'}
-                      </button>
-                    )}
-                  </div>
+                  )}
 
                   {canManageTrips && (
-                    <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => handleToggleCompleted(trip)}
+                      className={`text-[10px] px-2 py-1 rounded-lg border transition-colors ${
+                        trip.status === 'Terminé'
+                          ? 'bg-purple-500/10 text-purple-300 border-purple-500/30 hover:bg-purple-500/20'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                      }`}
+                      title={trip.status === 'Terminé' ? 'Cliquer pour réactiver' : 'Marquer comme terminé'}
+                    >
+                      {trip.status === 'Terminé' ? '✓ Fait' : 'Finir'}
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center space-x-1">
+                  {/* Export Calendar */}
+                  <button
+                    onClick={() => handleExportIcs(trip)}
+                    className="p-1.5 text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 rounded-lg transition-colors"
+                    title="Exporter vers Calendrier (.ics)"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+
+                  {/* Print Roadbook */}
+                  <button
+                    onClick={() => handlePrintRoadbook(trip)}
+                    className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                    title="Imprimer / Fiche Voyage PDF"
+                  >
+                    <Printer className="w-4 h-4" />
+                  </button>
+
+                  {canManageTrips && (
+                    <>
+                      {/* Duplicate */}
+                      <button
+                        onClick={() => handleDuplicate(trip)}
+                        className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                        title="Dupliquer ce voyage"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+
+                      {/* Edit */}
                       <button
                         onClick={() => handleOpenEdit(trip)}
                         className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                        title="Modifier le voyage"
+                        title="Modifier"
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
+
+                      {/* Delete */}
                       <button
                         onClick={() => {
-                          if (confirm(`Supprimer le voyage "${trip.title}" et toutes ses données associées ?`)) {
+                          if (confirm(`Supprimer définitivement "${trip.title}" ?`)) {
                             deleteTrip(trip.id);
                           }
                         }}
@@ -815,7 +861,7 @@ export const TripsView: React.FC = () => {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -824,14 +870,525 @@ export const TripsView: React.FC = () => {
         })}
       </div>
 
-      {/* Modal: Create or Edit Trip */}
+      {/* MODAL 1: AI GENERATOR V2 */}
+      <Modal
+        isOpen={isGeneratorModalOpen}
+        onClose={() => !isGenerating && setIsGeneratorModalOpen(false)}
+        title="Générateur d'Itinéraire IA V2 & Organisateur Complet"
+        subtitle="Détection de destination avec tolérance orthographique, planning dynamique, valise intelligente & budget prévisionnel"
+      >
+        <div className="space-y-4">
+          <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-600/10 to-amber-700/15 border border-amber-500/30 text-xs text-amber-200">
+            ✨ <strong>Moteur IA V2</strong> : Analyse la destination, corrige l'orthographe, sélectionne de véritables points d'intérêt, organise les créneaux horaires sans conflit, injecte le budget et prépare votre trousseau de valise.
+          </div>
+
+          {/* Destination input */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Destination / Ville (Tolérance aux fautes d'orthographe)
+            </label>
+            <input
+              type="text"
+              value={genDestination}
+              onChange={e => setGenDestination(e.target.value)}
+              placeholder="ex: djerba, brcelon, tokio, rome, marakech, paris, tozeur..."
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+            />
+            {/* Quick popular pills */}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {['Djerba, Tunisie', 'Barcelone, Espagne', 'Tokyo, Japon', 'Rome, Italie', 'Marrakech, Maroc', 'Paris, France'].map(dest => (
+                <button
+                  type="button"
+                  key={dest}
+                  onClick={() => setGenDestination(dest)}
+                  className={`text-[10px] px-2 py-0.5 rounded-lg border transition-colors ${
+                    genDestination === dest
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                >
+                  {dest.split(',')[0]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Duration & Start date */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Durée du séjour ({genDays} jours)
+              </label>
+              <input
+                type="range"
+                min="2"
+                max="14"
+                value={genDays}
+                onChange={e => setGenDays(Number(e.target.value))}
+                className="w-full accent-amber-500"
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                <span>Week-end (2j)</span>
+                <span>Semaine (7j)</span>
+                <span>Circuit (14j)</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Date de départ</label>
+              <input
+                type="date"
+                value={genStartDate}
+                onChange={e => setGenStartDate(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          {/* Pace & Budget tier */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Rythme de visite</label>
+              <select
+                value={genPace}
+                onChange={e => setGenPace(e.target.value as any)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              >
+                <option value="Relaxed">🌿 Relaxé (1 à 2 étapes/j)</option>
+                <option value="Balanced">⚖️ Équilibré (3 étapes/j)</option>
+                <option value="Intense">⚡ Intensif (4 étapes/j)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Profil de Budget</label>
+              <select
+                value={genBudgetTier}
+                onChange={e => setGenBudgetTier(e.target.value as any)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              >
+                <option value="Économique">🎒 Éco / Backpacker (~45€/n)</option>
+                <option value="Équilibré">🏨 Équilibré (~95€/n)</option>
+                <option value="Confort">💎 Confort / Premium (~190€/n)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Theme selection */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Thématique Principale</label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {[
+                'Culture & Histoire', 
+                'Gastronomie & Vins', 
+                'Nature & Randonnée', 
+                'Plage & Détente', 
+                'Aventure & Découverte'
+              ].map(t => (
+                <button
+                  type="button"
+                  key={t}
+                  onClick={() => setGenTheme(t)}
+                  className={`py-1.5 px-2.5 rounded-lg border text-xs text-left transition-colors truncate ${
+                    genTheme === t
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Real Participants from Platform Users */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              Associer des membres du projet au séjour
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {allUsers.map(user => {
+                const isSelected = genParticipants.includes(user.name);
+                return (
+                  <button
+                    type="button"
+                    key={user.id}
+                    onClick={() => {
+                      setGenParticipants(prev => 
+                        prev.includes(user.name) ? prev.filter(p => p !== user.name) : [...prev, user.name]
+                      );
+                    }}
+                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-xl border text-xs transition-all ${
+                      isSelected
+                        ? 'bg-brand-600/30 text-brand-300 border-brand-500 font-semibold'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <img src={user.avatar} alt={user.name} className="w-4 h-4 rounded-full object-cover" />
+                    <span>{user.name}</span>
+                    {isSelected && <Check className="w-3 h-3 text-brand-400" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Generating step indicator */}
+          {isGenerating && (
+            <div className="p-3 rounded-xl bg-slate-900 border border-amber-500/30 text-xs text-amber-300 flex items-center space-x-2 animate-pulse">
+              <Sparkles className="w-4 h-4 text-amber-400 animate-spin flex-shrink-0" />
+              <span>{generationStep || 'Calcul de l’itinéraire optimal...'}</span>
+            </div>
+          )}
+
+          <div className="pt-3 flex justify-end space-x-3 border-t border-slate-800">
+            <button
+              type="button"
+              disabled={isGenerating}
+              onClick={() => setIsGeneratorModalOpen(false)}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-xl"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              disabled={isGenerating}
+              onClick={handleAutoGenerateItinerary}
+              className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-extrabold rounded-xl shadow-lg shadow-amber-500/25 flex items-center space-x-2"
+            >
+              {isGenerating ? (
+                <>
+                  <Sparkles className="w-4 h-4 animate-spin" />
+                  <span>Génération en cours...</span>
+                </>
+              ) : (
+                <>
+                  <PlaneTakeoff className="w-4 h-4" />
+                  <span>Lancer la Génération IA</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* MODAL 2: SMART PACKING LIST */}
+      <Modal
+        isOpen={!!packingModalTrip}
+        onClose={() => setPackingModalTrip(null)}
+        title={`Valise Intelligente • ${packingModalTrip?.title || ''}`}
+        subtitle="Checklist dynamique adaptée à la météo et aux activités prévues"
+      >
+        {packingModalTrip && (
+          <div className="space-y-4">
+            {/* Progress Bar */}
+            {(() => {
+              const list = packingModalTrip.packingList || [];
+              const total = list.length;
+              const packed = list.filter(i => i.isPacked).length;
+              const pct = total > 0 ? Math.round((packed / total) * 100) : 0;
+              return (
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-white">Progression de la Valise :</span>
+                    <span className="font-bold text-amber-400">{packed} / {total} articles emballés ({pct}%)</span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-amber-500 to-emerald-400 transition-all duration-300"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Category filter pills & Regenerate button */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <div className="flex flex-wrap gap-1">
+                {['all', 'Vêtements', 'Documents', 'Hygiène & Soins', 'Électronique', 'Spécifique Destination'].map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedPackingCategory(cat)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors ${
+                      selectedPackingCategory === cat
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {cat === 'all' ? 'Tous' : cat}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => handleRegeneratePackingList(packingModalTrip)}
+                className="text-[11px] text-amber-400 hover:text-amber-300 font-bold flex items-center space-x-1"
+                title="Régénérer automatiquement selon la destination et la météo"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Régénérer IA</span>
+              </button>
+            </div>
+
+            {/* Packing Items List */}
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              {(() => {
+                const list = packingModalTrip.packingList || [];
+                const filtered = selectedPackingCategory === 'all'
+                  ? list
+                  : list.filter(i => i.category === selectedPackingCategory);
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-6 text-xs text-slate-500">
+                      Aucun article dans cette catégorie. Ajoutez-en un ci-dessous !
+                    </div>
+                  );
+                }
+
+                return filtered.map(item => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleTogglePackItem(packingModalTrip, item.id)}
+                    className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                      item.isPacked
+                        ? 'bg-emerald-950/30 border-emerald-500/30 text-slate-400 line-through'
+                        : 'bg-slate-800/60 border-slate-700/80 text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5 truncate">
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center ${
+                        item.isPacked ? 'bg-emerald-500 border-emerald-400 text-slate-950' : 'border-slate-600'
+                      }`}>
+                        {item.isPacked && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                      <span className="text-xs truncate">{item.label}</span>
+                    </div>
+
+                    <div className="flex items-center space-x-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                        {item.category}
+                      </span>
+                      <button
+                        onClick={() => handleDeletePackItem(packingModalTrip, item.id)}
+                        className="text-slate-500 hover:text-rose-400 p-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+
+            {/* Add New Item Form */}
+            <form onSubmit={handleAddPackItem} className="pt-2 border-t border-slate-800 flex gap-2">
+              <input
+                type="text"
+                value={newPackingLabel}
+                onChange={e => setNewPackingLabel(e.target.value)}
+                placeholder="Ajouter un article (ex: Maillot de bain)..."
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+              <select
+                value={newPackingCat}
+                onChange={e => setNewPackingCat(e.target.value as PackingCategory)}
+                className="bg-slate-800 border border-slate-700 rounded-xl px-2 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+              >
+                <option value="Vêtements">Vêtements</option>
+                <option value="Documents">Documents</option>
+                <option value="Hygiène & Soins">Hygiène</option>
+                <option value="Électronique">Électro</option>
+                <option value="Spécifique Destination">Spécifique</option>
+              </select>
+              <button
+                type="submit"
+                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl"
+              >
+                Ajouter
+              </button>
+            </form>
+          </div>
+        )}
+      </Modal>
+
+      {/* MODAL 3: TRAVEL DOCUMENTS & VAULT */}
+      <Modal
+        isOpen={!!docsModalTrip}
+        onClose={() => setDocsModalTrip(null)}
+        title={`Coffre-fort Documents • ${docsModalTrip?.title || ''}`}
+        subtitle="Billets d'avion, vouchers d'hôtel et polices d'assurance stockés 100% hors-ligne"
+      >
+        {docsModalTrip && (
+          <div className="space-y-4">
+            {/* Existing Documents List */}
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {(docsModalTrip.travelDocs || []).length === 0 ? (
+                <div className="text-center py-6 text-xs text-slate-500 space-y-1">
+                  <FileText className="w-8 h-8 text-slate-600 mx-auto" />
+                  <p>Aucun document ou bon de réservation enregistré.</p>
+                </div>
+              ) : (
+                (docsModalTrip.travelDocs || []).map(doc => (
+                  <div key={doc.id} className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 flex items-center justify-between gap-3 text-xs">
+                    <div className="space-y-0.5 truncate">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-white truncate">{doc.title}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-600/40 font-semibold">
+                          {doc.category}
+                        </span>
+                      </div>
+                      {doc.referenceCode && (
+                        <p className="text-[11px] text-amber-300 font-mono">
+                          Réf / PNR : {doc.referenceCode}
+                        </p>
+                      )}
+                      {doc.notes && <p className="text-[10px] text-slate-400 italic truncate">{doc.notes}</p>}
+                    </div>
+
+                    <div className="flex items-center space-x-2 flex-shrink-0">
+                      {doc.fileUrl && (
+                        <a
+                          href={doc.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-[10px] font-semibold flex items-center space-x-1"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Voir</span>
+                        </a>
+                      )}
+                      <button
+                        onClick={() => handleDeleteDoc(docsModalTrip, doc.id)}
+                        className="text-slate-500 hover:text-rose-400 p-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Add Document Form */}
+            <form onSubmit={handleAddDocSubmit} className="pt-3 border-t border-slate-800 space-y-2.5">
+              <span className="block text-xs font-bold text-white">Ajouter un justificatif ou voucher</span>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  required
+                  value={newDocTitle}
+                  onChange={e => setNewDocTitle(e.target.value)}
+                  placeholder="ex: Billet Aller-Retour TU712"
+                  className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                />
+                <select
+                  value={newDocCategory}
+                  onChange={e => setNewDocCategory(e.target.value as TravelDocCategory)}
+                  className="bg-slate-800 border border-slate-700 rounded-xl px-2 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                >
+                  <option value="Vol / Billet">Vol / Billet</option>
+                  <option value="Hôtel / Logement">Hôtel / Logement</option>
+                  <option value="Assurance">Assurance voyage</option>
+                  <option value="Identité / Visa">Identité / Visa</option>
+                  <option value="Autre">Autre</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={newDocCode}
+                  onChange={e => setNewDocCode(e.target.value)}
+                  placeholder="Code PNR / Réf réservation (ex: 6K9L2Z)"
+                  className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                />
+                <label className="flex items-center justify-center space-x-2 px-3 py-2 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl text-xs text-slate-300 cursor-pointer">
+                  <Upload className="w-3.5 h-3.5 text-sky-400" />
+                  <span className="truncate">{newDocFileUrl ? 'Pièce jointe prête ✓' : 'Joindre un fichier / photo'}</span>
+                  <input type="file" onChange={handleFileUpload} className="hidden" />
+                </label>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newDocNotes}
+                  onChange={e => setNewDocNotes(e.target.value)}
+                  placeholder="Remarques (ex: Borne 2A, bagage 10kg inclus)"
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-xl"
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </Modal>
+
+      {/* MODAL 4: JOIN TRIP WITH CODE */}
+      <Modal
+        isOpen={isJoinModalOpen}
+        onClose={() => setIsJoinModalOpen(false)}
+        title="Rejoindre un Voyage Organisé"
+        subtitle="Saisissez le code de partage à 6 caractères transmis par l'organisateur"
+      >
+        <form onSubmit={handleJoinTripSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Code de Partage (ex: TRIP-7X4K)
+            </label>
+            <input
+              type="text"
+              required
+              value={joinCodeInput}
+              onChange={e => setJoinCodeInput(e.target.value.toUpperCase())}
+              placeholder="TRIP-XXXX"
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-center text-lg font-mono font-bold tracking-widest text-amber-400 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          {joinFeedback && (
+            <div className={`p-3 rounded-xl text-xs ${
+              joinFeedback.includes('succès') || joinFeedback.includes('rejoint')
+                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40'
+                : 'bg-rose-950/80 text-rose-300 border border-rose-500/40'
+            }`}>
+              {joinFeedback}
+            </div>
+          )}
+
+          <div className="pt-2 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={() => setIsJoinModalOpen(false)}
+              className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl"
+            >
+              Fermer
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-500/25"
+            >
+              Valider & Rejoindre
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL 5: MANUAL CREATE / EDIT TRIP */}
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         title={editingTrip ? 'Modifier le Voyage' : 'Nouveau Voyage'}
         subtitle="Renseignez les détails généraux de votre séjour"
       >
-        <form onSubmit={handleSaveTrip} className="space-y-4">
+        <form onSubmit={handleSaveTrip} className="space-y-3.5">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">Titre du voyage</label>
             <input
@@ -839,12 +1396,12 @@ export const TripsView: React.FC = () => {
               required
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="ex: Roadtrip Côte Ouest des États-Unis"
+              placeholder="ex: Roadtrip Côte Ouest ou Échappée Djerba"
               className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Destination / Ville</label>
               <input
@@ -852,7 +1409,7 @@ export const TripsView: React.FC = () => {
                 required
                 value={destination}
                 onChange={e => setDestination(e.target.value)}
-                placeholder="ex: San Francisco & Yosemite"
+                placeholder="ex: Djerba"
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
               />
             </div>
@@ -860,16 +1417,15 @@ export const TripsView: React.FC = () => {
               <label className="block text-xs font-semibold text-slate-300 mb-1">Pays</label>
               <input
                 type="text"
-                required
                 value={country}
                 onChange={e => setCountry(e.target.value)}
-                placeholder="ex: USA"
+                placeholder="ex: Tunisie"
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Date de début</label>
               <input
@@ -892,7 +1448,7 @@ export const TripsView: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Budget prévisionnel</label>
               <input
@@ -911,51 +1467,31 @@ export const TripsView: React.FC = () => {
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
               >
                 <option value="EUR">EUR (€)</option>
-                <option value="USD">USD ($)</option>
                 <option value="TND">TND (DT)</option>
+                <option value="USD">USD ($)</option>
                 <option value="GBP">GBP (£)</option>
+                <option value="JPY">JPY (¥)</option>
               </select>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Statut du séjour</label>
-            <div className="grid grid-cols-4 gap-2">
-              {(['Brouillon', 'Planifié', 'En cours', 'Terminé'] as TripStatus[]).map(st => (
-                <button
-                  type="button"
-                  key={st}
-                  onClick={() => setStatus(st)}
-                  className={`py-1.5 text-xs font-medium rounded-lg border ${
-                    status === st
-                      ? 'bg-brand-600 text-white border-brand-500'
-                      : 'bg-slate-800 text-slate-400 border-slate-700'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
-            </div>
-          </div>
-
+          {/* Cover image with AI helper */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-300">Image de couverture</label>
+              <label className="text-xs font-semibold text-slate-300">Photo de couverture</label>
               <button
                 type="button"
                 onClick={() => {
                   if (destination.trim()) {
-                    const aiCover = getDestinationCover(destination);
-                    setCoverImage(aiCover);
+                    setCoverImage(getDestinationCover(destination));
                   } else {
-                    alert("Veuillez d'abord saisir le nom d'une destination ou ville.");
+                    alert("Saisissez d'abord une destination.");
                   }
                 }}
                 className="text-[11px] text-amber-400 hover:text-amber-300 font-bold flex items-center space-x-1"
-                title="L'IA sélectionne automatiquement une image haute définition sublime"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>✨ Choisir image sublime par IA</span>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Trouver image HD par IA</span>
               </button>
             </div>
             <input
@@ -965,153 +1501,52 @@ export const TripsView: React.FC = () => {
               placeholder="https://images.unsplash.com/..."
               className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
             />
-            {coverImage && (
-              <div className="mt-2 relative h-28 rounded-xl overflow-hidden border border-slate-700">
-                <img src={coverImage} alt="Aperçu couverture" className="w-full h-full object-cover" />
-                <span className="absolute bottom-2 left-2 bg-slate-950/80 px-2 py-0.5 rounded text-[10px] text-amber-300 font-semibold border border-amber-500/30">
-                  ✨ Image sélectionnée par IA
-                </span>
-              </div>
-            )}
           </div>
 
+          {/* Select real project members as participants */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Participants (séparés par des virgules)</label>
-            <input
-              type="text"
-              value={participantsText}
-              onChange={e => setParticipantsText(e.target.value)}
-              placeholder="Moi, Sophie, Marc..."
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
-            />
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              Participants parmi les membres du projet
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {allUsers.map(user => {
+                const isSelected = selectedParticipants.includes(user.name);
+                return (
+                  <button
+                    type="button"
+                    key={user.id}
+                    onClick={() => handleToggleParticipant(user.name)}
+                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-xl border text-xs transition-all ${
+                      isSelected
+                        ? 'bg-brand-600/30 text-brand-300 border-brand-500 font-semibold'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <img src={user.avatar} alt={user.name} className="w-4 h-4 rounded-full object-cover" />
+                    <span>{user.name}</span>
+                    {isSelected && <Check className="w-3 h-3 text-brand-400" />}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="pt-4 flex justify-end space-x-3">
+          <div className="pt-3 flex justify-end space-x-3 border-t border-slate-800">
             <button
               type="button"
               onClick={() => setIsCreateModalOpen(false)}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-sm font-semibold rounded-xl"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-semibold rounded-xl"
             >
               Annuler
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-brand-500/30"
+              className="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-500/30"
             >
               {editingTrip ? 'Mettre à jour' : 'Enregistrer le Voyage'}
             </button>
           </div>
         </form>
-      </Modal>
-
-      {/* Modal: AI Smart Itinerary Generator */}
-      <Modal
-        isOpen={isGeneratorModalOpen}
-        onClose={() => setIsGeneratorModalOpen(false)}
-        title="Organisateur de Voyage IA & Planning Intelligent"
-        subtitle="Recherche du lieu (tolère les fautes), sélection d'image, POI sur la carte, planning et budget complet"
-      >
-        <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-600/10 to-amber-700/10 border border-amber-500/20 text-xs text-amber-200">
-            ✨ Véritable voyage organisé par IA : recherche et géocodage du lieu, sélection automatique de la photo de couverture, placement des meilleurs points d'intérêt sur la carte, planning journalier détaillé et calcul du budget prévisionnel.
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Destination cible (même mal orthographiée)</label>
-            <input
-              type="text"
-              value={genDestination}
-              onChange={e => setGenDestination(e.target.value)}
-              placeholder="ex: brcelon, djerba tunisie, tokio, marakech, rome, amstrdam..."
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-            />
-            <p className="text-[11px] text-amber-400/90 mt-1 flex items-center space-x-1">
-              <Sparkles className="w-3 h-3 flex-shrink-0" />
-              <span>L'IA analyse le nom, corrige l'orthographe, trouve les coordonnées GPS réelles et choisit une photo sublime.</span>
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Durée du séjour ({genDays} jours)</label>
-              <input
-                type="range"
-                min="2"
-                max="14"
-                value={genDays}
-                onChange={e => setGenDays(Number(e.target.value))}
-                className="w-full accent-amber-500"
-              />
-              <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                <span>Week-end (2j)</span>
-                <span>Semaine (7j)</span>
-                <span>Grand voyage (14j)</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Rythme</label>
-              <select
-                value={genPace}
-                onChange={e => setGenPace(e.target.value as 'Relaxed' | 'Balanced' | 'Intense')}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-              >
-                <option value="Relaxed">Relaxé (1 à 2 étapes/jour)</option>
-                <option value="Balanced">Équilibré (3 étapes/jour)</option>
-                <option value="Intense">Intensif (Exploration max)</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Thématique principale</label>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {['Culture & Histoire', 'Gastronomie & Vins', 'Nature & Randonnée', 'Plage & Détente'].map(t => (
-                <button
-                  type="button"
-                  key={t}
-                  onClick={() => setGenTheme(t)}
-                  className={`py-2 px-3 rounded-lg border text-left transition-colors ${
-                    genTheme === t
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
-                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="pt-4 flex justify-end space-x-3">
-            <button
-              type="button"
-              disabled={isGenerating}
-              onClick={() => setIsGeneratorModalOpen(false)}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-sm font-semibold rounded-xl"
-            >
-              Annuler
-            </button>
-            <button
-              type="button"
-              disabled={isGenerating}
-              onClick={handleAutoGenerateItinerary}
-              className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-sm font-extrabold rounded-xl shadow-lg shadow-amber-500/30 flex items-center space-x-2"
-            >
-              {isGenerating ? (
-                <>
-                  <Sparkles className="w-4 h-4 animate-spin" />
-                  <span>Calcul de l'itinéraire optimal...</span>
-                </>
-              ) : (
-                <>
-                  <PlaneTakeoff className="w-4 h-4" />
-                  <span>Lancer la Génération</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
       </Modal>
     </div>
   );

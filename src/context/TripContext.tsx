@@ -12,6 +12,8 @@ interface TripContextType {
   addTrip: (tripData: Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Trip>;
   updateTrip: (id: string, updates: Partial<Trip>) => Promise<void>;
   deleteTrip: (id: string) => Promise<void>;
+  duplicateTrip: (id: string) => Promise<Trip>;
+  joinTripByCode: (code: string) => Promise<{ success: boolean; message: string; trip?: Trip }>;
   refreshTrips: () => Promise<void>;
 }
 
@@ -116,6 +118,24 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await refreshTrips();
   };
 
+  const duplicateTrip = async (id: string): Promise<Trip> => {
+    const cloned = await api.trips.duplicate(id, currentUser?.id, currentUser?.name);
+    await refreshTrips();
+    setActiveTripIdState(cloned.id);
+    localStorage.setItem(userStorageKey, cloned.id);
+    return cloned;
+  };
+
+  const joinTripByCode = async (code: string): Promise<{ success: boolean; message: string; trip?: Trip }> => {
+    const res = await api.trips.joinByCode(code, currentUser?.name || 'Moi');
+    if (res.success && res.trip) {
+      await refreshTrips();
+      setActiveTripIdState(res.trip.id);
+      localStorage.setItem(userStorageKey, res.trip.id);
+    }
+    return res;
+  };
+
   return (
     <TripContext.Provider
       value={{
@@ -127,6 +147,8 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addTrip,
         updateTrip,
         deleteTrip,
+        duplicateTrip,
+        joinTripByCode,
         refreshTrips
       }}
     >

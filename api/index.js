@@ -28600,6 +28600,13 @@ var TripSchema = new Schema2({
   participants: { type: [String], default: [] },
   itinerarySummary: { type: String, default: "" },
   notes: { type: String, default: "" },
+  shareCode: { type: String, default: "" },
+  packingList: { type: [Schema2.Types.Mixed], default: [] },
+  travelDocs: { type: [Schema2.Types.Mixed], default: [] },
+  destinationMeta: { type: Schema2.Types.Mixed, default: {} },
+  tripPace: { type: String, default: "Balanced" },
+  tripTheme: { type: String, default: "Culture & Gastronomie" },
+  travelStyle: { type: String, default: "\xC9quilibr\xE9" },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
@@ -42382,6 +42389,108 @@ router2.delete("/:id", async (req, res) => {
     await PlaceModel.deleteMany({ tripId });
     await ActivityModel.deleteMany({ tripId });
     res.json({ message: "Voyage et donn\xE9es associ\xE9es supprim\xE9s de MongoDB." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router2.post("/join", async (req, res) => {
+  try {
+    const { shareCode, userName } = req.body;
+    if (!shareCode || !userName) {
+      return res.status(400).json({ error: "Code de partage et nom d\u2019utilisateur requis" });
+    }
+    const cleanCode = shareCode.trim().toUpperCase();
+    const cleanUser = userName.trim().split(" ")[0];
+    const trip = await TripModel.findOne({ shareCode: cleanCode });
+    if (!trip) {
+      return res.status(404).json({ error: "Aucun voyage trouv\xE9 avec ce code de partage." });
+    }
+    if (!trip.participants.includes(cleanUser)) {
+      trip.participants.push(cleanUser);
+      trip.updatedAt = /* @__PURE__ */ new Date();
+      await trip.save();
+    }
+    res.json({ success: true, message: `Vous avez rejoint le voyage "${trip.title}" avec succ\xE8s !`, trip });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router2.post("/:id/duplicate", async (req, res) => {
+  try {
+    const requesterRole = req.headers["x-user-role"] || req.body.requesterRole;
+    if (requesterRole && requesterRole === "Traveler") {
+      return res.status(403).json({
+        error: "Acc\xE8s refus\xE9 : La duplication de s\xE9jours est r\xE9serv\xE9e aux Organisateurs et Administrateurs."
+      });
+    }
+    const originalTrip = await TripModel.findById(req.params.id);
+    if (!originalTrip) return res.status(404).json({ error: "Voyage d\u2019origine introuvable" });
+    const origStart = new Date(originalTrip.startDate);
+    const origEnd = new Date(originalTrip.endDate);
+    const diffDays = Math.max(1, Math.round((origEnd.getTime() - origStart.getTime()) / 864e5));
+    const newStart = new Date(Date.now() + 864e5);
+    const newEnd = new Date(newStart.getTime() + diffDays * 864e5);
+    const newShareCode = "TRIP-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+    const clonedTrip = new TripModel({
+      userId: req.body.userId || originalTrip.userId,
+      title: `${originalTrip.title} (Copie)`,
+      destination: originalTrip.destination,
+      country: originalTrip.country,
+      startDate: newStart.toISOString().split("T")[0],
+      endDate: newEnd.toISOString().split("T")[0],
+      coverImage: originalTrip.coverImage,
+      budgetTotal: originalTrip.budgetTotal,
+      currency: originalTrip.currency,
+      status: "Planifi\xE9",
+      participants: req.body.userName ? [req.body.userName] : originalTrip.participants,
+      itinerarySummary: originalTrip.itinerarySummary,
+      notes: originalTrip.notes,
+      shareCode: newShareCode,
+      packingList: originalTrip.packingList || [],
+      travelDocs: [],
+      destinationMeta: originalTrip.destinationMeta || {}
+    });
+    await clonedTrip.save();
+    const origPlaces = await PlaceModel.find({ tripId: originalTrip._id.toString() });
+    const placeIdMap = {};
+    for (const p of origPlaces) {
+      const clonedPlace = new PlaceModel({
+        tripId: clonedTrip._id.toString(),
+        name: p.name,
+        category: p.category,
+        address: p.address,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        rating: p.rating,
+        estimatedDurationMinutes: p.estimatedDurationMinutes,
+        costEstimate: p.costEstimate,
+        imageUrl: p.imageUrl,
+        notes: p.notes
+      });
+      await clonedPlace.save();
+      placeIdMap[p._id.toString()] = clonedPlace._id.toString();
+    }
+    const origActivities = await ActivityModel.find({ tripId: originalTrip._id.toString() });
+    for (const a of origActivities) {
+      const actDayOffset = (a.dayNumber || 1) - 1;
+      const actDate = new Date(newStart.getTime() + actDayOffset * 864e5).toISOString().split("T")[0];
+      const newPlaceId = a.placeId ? placeIdMap[a.placeId] : void 0;
+      const clonedActivity = new ActivityModel({
+        tripId: clonedTrip._id.toString(),
+        placeId: newPlaceId,
+        dayNumber: a.dayNumber,
+        date: actDate,
+        startTime: a.startTime,
+        endTime: a.endTime,
+        title: a.title,
+        description: a.description,
+        cost: a.cost,
+        status: "\xC0 faire",
+        orderIndex: a.orderIndex
+      });
+      await clonedActivity.save();
+    }
+    res.status(201).json(clonedTrip);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

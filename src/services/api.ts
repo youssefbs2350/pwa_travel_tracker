@@ -96,6 +96,85 @@ export const api = {
       }
     },
 
+    async joinByCode(shareCode: string, userName: string): Promise<{ success: boolean; message: string; trip?: Trip }> {
+      const code = shareCode.trim().toUpperCase();
+      const user = userName.trim().split(' ')[0];
+
+      // Try server first
+      try {
+        const res = await fetch('/api/trips/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shareCode: code, userName: user })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const trip = { ...data.trip, id: data.trip._id || data.trip.id };
+          await db.trips.put(trip);
+          return { success: true, message: data.message, trip };
+        } else {
+          const err = await res.json();
+          return { success: false, message: err.error || 'Code invalide.' };
+        }
+      } catch {
+        // Fallback local search in IndexedDB
+        const localTrip = await db.trips.filter(t => (t.shareCode || '').toUpperCase() === code).first();
+        if (localTrip) {
+          if (!localTrip.participants.includes(user)) {
+            localTrip.participants.push(user);
+            localTrip.updatedAt = new Date().toISOString();
+            await db.trips.put(localTrip);
+          }
+          return { success: true, message: `Vous avez rejoint "${localTrip.title}" !`, trip: localTrip };
+        }
+        return { success: false, message: 'Aucun voyage trouvé avec ce code de partage (mode hors-ligne).' };
+      }
+    },
+
+    async duplicate(id: string, userId: string = 'usr-default', userName: string = 'Moi'): Promise<Trip> {
+      try {
+        const res = await fetch(`/api/trips/${id}/duplicate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, userName })
+        });
+        if (res.ok) {
+          const cloned = await res.json();
+          const finalTrip = { ...cloned, id: cloned._id || cloned.id };
+          await db.trips.put(finalTrip);
+          return finalTrip;
+        }
+      } catch (err) {
+        console.warn('[API] Duplication via mode local:', err);
+      }
+
+      // Offline fallback clone directly from Dexie
+      const orig = await db.trips.get(id);
+      if (!orig) throw new Error('Voyage source introuvable');
+
+      const newId = 'trip-' + Date.now();
+      const start = new Date(Date.now() + 86400000);
+      const origStart = new Date(orig.startDate);
+      const origEnd = new Date(orig.endDate);
+      const diff = Math.max(1, Math.round((origEnd.getTime() - origStart.getTime()) / 86400000));
+      const end = new Date(start.getTime() + diff * 86400000);
+
+      const clonedTrip: Trip = {
+        ...orig,
+        id: newId,
+        title: `${orig.title} (Copie)`,
+        startDate: start.toISOString().split('T')[0],
+        endDate: end.toISOString().split('T')[0],
+        status: 'Planifié',
+        shareCode: 'TRIP-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await db.trips.put(clonedTrip);
+      return clonedTrip;
+    },
+
     async generateItinerary(payload: { destination: string; days: number; pace: string; theme: string }): Promise<any> {
       try {
         const res = await fetch('/api/trips/generate', {
