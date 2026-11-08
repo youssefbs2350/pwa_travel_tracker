@@ -1,5 +1,5 @@
 # Travel Tracker PWA 🌍✈️
-> Application Progressive Web App (PWA) connectée à **MongoDB**, installable et utilisable à 100% hors-ligne avec générateur d'itinéraires et de voyages assisté par l'IA.
+> Application Progressive Web App (PWA) connectée à **MongoDB**, installable et utilisable hors-ligne avec générateur d'itinéraires et de voyages assisté par l'IA.
 
 ---
 
