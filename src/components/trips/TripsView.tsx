@@ -700,20 +700,18 @@ export const TripsView: React.FC = () => {
                   </div>
 
                   {/* Participants : Le Voyageur voit le nombre de participants, Admin & Organisateur voient la liste complète */}
-                  {trip.participants && trip.participants.length > 0 && (
-                    <div className="flex items-center space-x-1.5 text-xs text-slate-400">
-                      <Users className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                      {currentUser?.role === 'Traveler' ? (
-                        <span className="font-medium text-slate-300">
-                          {trip.participants.length} participant{trip.participants.length > 1 ? 's' : ''} au voyage
-                        </span>
-                      ) : (
-                        <span className="truncate font-medium text-slate-300" title={'Participants : ' + trip.participants.join(', ')}>
-                          <strong className="text-amber-300 font-semibold">{trip.participants.length} participants :</strong> {trip.participants.join(', ')}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex items-center space-x-1.5 text-xs text-slate-400">
+                    <Users className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                    {currentUser?.role === 'Traveler' ? (
+                      <span className="font-medium text-slate-300">
+                        {trip.participants?.length || 0} participant{(trip.participants?.length || 0) > 1 ? 's' : ''} au voyage
+                      </span>
+                    ) : (
+                      <span className="truncate font-medium text-slate-300" title={trip.participants && trip.participants.length > 0 ? 'Participants : ' + trip.participants.join(', ') : 'Aucun participant'}>
+                        <strong className="text-amber-300 font-semibold">{trip.participants?.length || 0} participant{(trip.participants?.length || 0) > 1 ? 's' : ''} :</strong> {trip.participants && trip.participants.length > 0 ? trip.participants.join(', ') : 'Aucun'}
+                      </span>
+                    )}
+                  </div>
 
                   {/* Destination Meta Highlights */}
                   {trip.destinationMeta && (

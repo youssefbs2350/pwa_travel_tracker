@@ -131,6 +131,48 @@ export const api = {
       }
     },
 
+    async switchActiveParticipant(userName: string, oldTripId: string | null, newTripId: string | null): Promise<void> {
+      const cleanUser = userName.trim();
+      if (!cleanUser) return;
+
+      // 1. Mise à jour immédiate dans Dexie IndexedDB
+      try {
+        const localTrips = await db.trips.toArray();
+        for (const t of localTrips) {
+          let updated = false;
+          let parts = [...(t.participants || [])];
+          const isTarget = newTripId && t.id === newTripId;
+
+          if (isTarget) {
+            if (!parts.some(p => p.toLowerCase() === cleanUser.toLowerCase())) {
+              parts.push(cleanUser);
+              updated = true;
+            }
+          } else if (parts.some(p => p.toLowerCase() === cleanUser.toLowerCase())) {
+            parts = parts.filter(p => p.toLowerCase() !== cleanUser.toLowerCase());
+            updated = true;
+          }
+
+          if (updated) {
+            await db.trips.update(t.id, { participants: parts, updatedAt: new Date().toISOString() });
+          }
+        }
+      } catch (err) {
+        console.warn('[API] Erreur mise à jour participants locale Dexie:', err);
+      }
+
+      // 2. Appel serveur vers MongoDB
+      try {
+        await fetch('/api/trips/set-active-participant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userName: cleanUser, oldTripId, newTripId })
+        });
+      } catch {
+        console.log('[API] Changement de participant enregistré hors-ligne');
+      }
+    },
+
     async duplicate(id: string, userId: string = 'usr-default', userName: string = 'Moi'): Promise<Trip> {
       try {
         const res = await fetch(`/api/trips/${id}/duplicate`, {

@@ -53,6 +53,19 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (isSavedValid) {
         setActiveTripIdState(savedForUser);
+        if (currentUser?.name) {
+          const uName = currentUser.name.trim();
+          const targetTrip = all.find(t => t.id === savedForUser);
+          if (targetTrip && !(targetTrip.participants || []).some(p => p.toLowerCase() === uName.toLowerCase())) {
+            api.trips.switchActiveParticipant(uName, null, savedForUser);
+            setTrips(prev => prev.map(t => {
+              if (t.id === savedForUser) {
+                return { ...t, participants: [...(t.participants || []), uName] };
+              }
+              return { ...t, participants: (t.participants || []).filter(p => p.toLowerCase() !== uName.toLowerCase()) };
+            }));
+          }
+        }
       } else {
         // Recherche prioritaire : voyage où l'utilisateur participe ou est créateur
         const myTrip = currentUser 
@@ -82,8 +95,17 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setActiveTripId = (id: string | null) => {
     if (!id) {
+      const prevId = activeTripId;
       setActiveTripIdState(null);
       localStorage.removeItem(userStorageKey);
+      if (currentUser?.name) {
+        const uName = currentUser.name.trim();
+        setTrips(prev => prev.map(t => ({
+          ...t,
+          participants: (t.participants || []).filter(p => p.toLowerCase() !== uName.toLowerCase())
+        })));
+        api.trips.switchActiveParticipant(uName, prevId, null);
+      }
       return;
     }
     const target = trips.find(t => t.id === id);
@@ -91,9 +113,34 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       alert("Un voyage au passé ne peut pas être actif.");
       return;
     }
-    // Mise à jour locale pour CET utilisateur uniquement
+
+    const prevId = activeTripId;
     setActiveTripIdState(id);
     localStorage.setItem(userStorageKey, id);
+
+    // Synchronisation dynamique des participants
+    if (currentUser?.name) {
+      const uName = currentUser.name.trim();
+
+      // 1. Mise à jour instantanée du state React (réactivité immédiate sans rechargement)
+      setTrips(prev => prev.map(t => {
+        if (t.id === id) {
+          const hasUser = (t.participants || []).some(p => p.toLowerCase() === uName.toLowerCase());
+          const nextParts = hasUser ? (t.participants || []) : [...(t.participants || []), uName];
+          return { ...t, participants: nextParts };
+        }
+        if ((t.participants || []).some(p => p.toLowerCase() === uName.toLowerCase())) {
+          return {
+            ...t,
+            participants: (t.participants || []).filter(p => p.toLowerCase() !== uName.toLowerCase())
+          };
+        }
+        return t;
+      }));
+
+      // 2. Persistance locale Dexie + synchronisation backend MongoDB
+      api.trips.switchActiveParticipant(uName, prevId, id);
+    }
   };
 
   const activeTrip = trips.find(t => t.id === activeTripId && !isPastTrip(t)) || null;

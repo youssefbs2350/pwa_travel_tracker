@@ -321,49 +321,7 @@ export const AuthScreen: React.FC = () => {
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              {/* Quick Demo Logins */}
-              <div className="pt-3 border-t border-slate-800 space-y-2">
-                <p className="text-[11px] font-semibold text-slate-400 text-center">
-                  ⚡ Connexion Rapide (Comptes Démo) :
-                </p>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail('chaima@traveltracker.io');
-                      setPassword('password123');
-                    }}
-                    className="p-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-center transition-all group"
-                  >
-                    <span className="block text-[11px] font-bold text-amber-300">Chaima</span>
-                    <span className="block text-[9px] text-amber-400/80 font-semibold">👑 Admin</span>
-                  </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail('youssef@traveltracker.io');
-                      setPassword('password123');
-                    }}
-                    className="p-2 bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 rounded-xl text-center transition-all group"
-                  >
-                    <span className="block text-[11px] font-bold text-brand-300">Youssef</span>
-                    <span className="block text-[9px] text-brand-400/80 font-semibold">🧭 Organisateur</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail('ameni@traveltracker.io');
-                      setPassword('password123');
-                    }}
-                    className="p-2 bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl text-center transition-all group"
-                  >
-                    <span className="block text-[11px] font-bold text-slate-200">Ameni</span>
-                    <span className="block text-[9px] text-slate-400 font-semibold">✈️ Voyageur</span>
-                  </button>
-                </div>
-              </div>
             </form>
           )}
 

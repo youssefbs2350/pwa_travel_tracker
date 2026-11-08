@@ -42415,6 +42415,43 @@ router2.post("/join", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router2.post("/set-active-participant", async (req, res) => {
+  try {
+    const { userName, oldTripId, newTripId } = req.body;
+    if (!userName || typeof userName !== "string") {
+      return res.status(400).json({ error: "Nom d\u2019utilisateur requis" });
+    }
+    const cleanUser = userName.trim();
+    if (!cleanUser) {
+      return res.status(400).json({ error: "Nom d\u2019utilisateur invalide" });
+    }
+    const allTrips = await TripModel.find({});
+    for (const t of allTrips) {
+      const tripIdentifier = t._id ? t._id.toString() : t.id;
+      const isTarget = newTripId && (tripIdentifier === newTripId || t.id === newTripId);
+      let changed = false;
+      if (isTarget) {
+        if (!t.participants.some((p) => p.toLowerCase() === cleanUser.toLowerCase())) {
+          t.participants.push(cleanUser);
+          changed = true;
+        }
+      } else {
+        if (t.participants && t.participants.some((p) => p.toLowerCase() === cleanUser.toLowerCase())) {
+          t.participants = t.participants.filter((p) => p.toLowerCase() !== cleanUser.toLowerCase());
+          changed = true;
+        }
+      }
+      if (changed) {
+        t.updatedAt = /* @__PURE__ */ new Date();
+        await t.save();
+      }
+    }
+    const updatedTrips = await TripModel.find().sort({ startDate: -1 });
+    res.json({ success: true, trips: updatedTrips });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 router2.post("/:id/duplicate", async (req, res) => {
   try {
     const requesterRole = req.headers["x-user-role"] || req.body.requesterRole;
