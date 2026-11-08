@@ -5,13 +5,13 @@ import './index.css'
 import { registerSW } from 'virtual:pwa-register'
 
 // Automatically register Service Worker for offline PWA functionality
-registerSW({
+const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
-    console.log('Nouvelle version de Travel Tracker PWA disponible.');
+    updateSW(true);
   },
   onOfflineReady() {
-    console.log('Travel Tracker PWA est prête pour une utilisation hors-ligne.');
+    console.log('Travel Tracker PWA est prête.');
   }
 })
 
