@@ -12,10 +12,8 @@ interface AuthContextType {
   register: (name: string, email: string, password: string, preferences?: any) => Promise<{ success: boolean; message?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; code?: string; sent?: boolean; message?: string }>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
-  demoLogin: (email: string) => Promise<void>;
   logout: () => void;
   updateUserRole: (targetUserId: string, newRole: UserRole) => Promise<{ success: boolean; message?: string }>;
-  switchUser: (userId: string) => Promise<void>;
   updatePreferences: (prefs: Partial<User['preferences']>) => Promise<void>;
 }
 
@@ -27,53 +25,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(localStorage.getItem('tt_jwt_token'));
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load all users from MongoDB or local IndexedDB
-  const fetchUsers = async () => {
+  // Charge la liste complète des utilisateurs exclusivement pour le profil Admin
+  const loadAdminUsers = async () => {
     try {
-      let usersList: User[] = [];
-      try {
-        const res = await fetch('/api/users');
-        if (res.ok) {
-          const remoteUsers = await res.json();
-          usersList = remoteUsers.map((u: any) => ({
-            ...u,
-            id: u._id || u.id
-          }));
-          await db.users.bulkPut(usersList);
-        }
-      } catch {
-        usersList = await db.users.toArray();
+      const res = await fetch('/api/users', {
+        headers: { 'x-user-role': 'Admin' }
+      });
+      if (res.ok) {
+        const remoteUsers = await res.json();
+        const usersList: User[] = remoteUsers.map((u: any) => ({
+          ...u,
+          id: u._id || u.id
+        }));
+        setAllUsers(usersList);
       }
+    } catch {
+      // offline
+    }
+  };
 
-      setAllUsers(usersList);
-
+  // Restaure la session active sans exposer la liste globale des comptes aux voyageurs / organisateurs
+  const fetchSession = async () => {
+    try {
       const savedToken = localStorage.getItem('tt_jwt_token');
       const savedUserId = localStorage.getItem('tt_user_id');
 
       if (savedToken && savedUserId) {
-        const matching = usersList.find(u => u.id === savedUserId);
-        if (matching) {
-          setCurrentUser(matching);
+        let user: User | null = null;
+        try {
+          const res = await fetch(`/api/users/${savedUserId}`);
+          if (res.ok) {
+            const data = await res.json();
+            const loadedUser: User = { ...data, id: data._id || data.id };
+            user = loadedUser;
+            await db.users.put(loadedUser);
+          }
+        } catch {
+          user = (await db.users.get(savedUserId)) || null;
+        }
+
+        if (user) {
+          setCurrentUser(user);
           setToken(savedToken);
+          if (user.role === 'Admin') {
+            await loadAdminUsers();
+          } else {
+            setAllUsers([]);
+          }
         } else {
           localStorage.removeItem('tt_jwt_token');
           localStorage.removeItem('tt_user_id');
           setCurrentUser(null);
           setToken(null);
+          setAllUsers([]);
         }
       } else {
         setCurrentUser(null);
         setToken(null);
+        setAllUsers([]);
       }
     } catch (err) {
-      console.error('Error fetching users:', err);
+      console.error('Error fetching session:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchSession();
   }, []);
 
   const login = async (email: string, password?: string): Promise<{ success: boolean; message?: string }> => {
@@ -94,6 +113,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(user);
         setToken(userToken);
         await db.users.put(user);
+
+        if (user.role === 'Admin') {
+          await loadAdminUsers();
+        } else {
+          setAllUsers([]);
+        }
+
         return { success: true };
       } else {
         const err = await res.json();
@@ -108,6 +134,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('tt_user_id', local.id);
         setCurrentUser(local);
         setToken(offlineToken);
+        if (local.role === 'Admin') {
+          const localUsers = await db.users.toArray();
+          setAllUsers(localUsers);
+        } else {
+          setAllUsers([]);
+        }
         return { success: true };
       }
       return { success: false, message: 'Utilisateur introuvable en mode hors-ligne.' };
@@ -198,15 +230,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const demoLogin = async (email: string) => {
-    await login(email, 'password123');
-  };
-
   const logout = () => {
     localStorage.removeItem('tt_jwt_token');
     localStorage.removeItem('tt_user_id');
     setCurrentUser(null);
     setToken(null);
+    setAllUsers([]);
   };
 
   // STRICT ADMIN ROLE MODIFICATION
@@ -251,17 +280,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const switchUser = async (userId: string) => {
-    const user = allUsers.find(u => u.id === userId);
-    if (user) {
-      const userToken = 'jwt-bearer-' + user.role.toLowerCase() + '-' + user.id;
-      localStorage.setItem('tt_jwt_token', userToken);
-      localStorage.setItem('tt_user_id', user.id);
-      setCurrentUser(user);
-      setToken(userToken);
-    }
-  };
-
   const updatePreferences = async (prefs: Partial<User['preferences']>) => {
     if (!currentUser) return;
     const newPreferences = { ...currentUser.preferences, ...prefs };
@@ -292,10 +310,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         forgotPassword,
         resetPassword,
-        demoLogin,
         logout,
         updateUserRole,
-        switchUser,
         updatePreferences
       }}
     >

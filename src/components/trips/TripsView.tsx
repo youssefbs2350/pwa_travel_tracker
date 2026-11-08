@@ -699,14 +699,19 @@ export const TripsView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Participants */}
+                  {/* Participants : Le Voyageur voit le nombre de participants, Admin & Organisateur voient la liste complète */}
                   {trip.participants && trip.participants.length > 0 && (
                     <div className="flex items-center space-x-1.5 text-xs text-slate-400">
-                      <Users className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                      <span className="truncate">
-                        {trip.participants.slice(0, 3).join(', ')}
-                        {trip.participants.length > 3 && ` +${trip.participants.length - 3}`}
-                      </span>
+                      <Users className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                      {currentUser?.role === 'Traveler' ? (
+                        <span className="font-medium text-slate-300">
+                          {trip.participants.length} participant{trip.participants.length > 1 ? 's' : ''} au voyage
+                        </span>
+                      ) : (
+                        <span className="truncate font-medium text-slate-300" title={'Participants : ' + trip.participants.join(', ')}>
+                          <strong className="text-amber-300 font-semibold">{trip.participants.length} participants :</strong> {trip.participants.join(', ')}
+                        </span>
+                      )}
                     </div>
                   )}
 

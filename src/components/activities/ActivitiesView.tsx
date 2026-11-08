@@ -37,6 +37,14 @@ import { api } from '../../services/api';
 import { db } from '../../db/database';
 import { useAppCurrency } from '../../utils/currency';
 import { fetchActivityWeather, ActivityWeatherData } from '../../services/weather';
+import { 
+  computeTripTemporalStatus, 
+  getDateForTripDay, 
+  formatDayShort, 
+  formatDayFull, 
+  formatLocalDate, 
+  getTodayLocalDateStr 
+} from '../../utils/date';
 
 const WeatherIcon: React.FC<{ iconName: string; className?: string }> = ({ iconName, className }) => {
   switch (iconName) {
@@ -101,28 +109,27 @@ export const ActivitiesView: React.FC = () => {
   const [alertEmailStatus, setAlertEmailStatus] = useState<string | null>(null);
   const alertedActivitiesRef = useRef<Set<string>>(new Set());
 
-  // Déterminer le jour actuel du voyage selon la date réelle du jour
-  const getCurrentDayOfTrip = useCallback((): number => {
-    if (!activeTrip?.startDate) return 1;
-    const start = new Date(activeTrip.startDate);
-    start.setHours(0, 0, 0, 0);
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const diff = Math.floor((now.getTime() - start.getTime()) / 86400000) + 1;
-    if (diff < 1) return 1;
-    const maxDay = activeTrip.endDate 
-      ? Math.max(1, Math.floor((new Date(activeTrip.endDate).getTime() - start.getTime()) / 86400000) + 1)
-      : Math.max(...activities.map(a => a.dayNumber || 1), 7);
-    return Math.min(diff, maxDay);
-  }, [activeTrip?.startDate, activeTrip?.endDate, activities]);
+  // Déterminer le statut temporel réel du voyage par rapport au calendrier d'aujourd'hui
+  const maxActDay = Math.max(1, ...activities.map(a => a.dayNumber || 1));
+  const tripTemporal = computeTripTemporalStatus(activeTrip?.startDate, activeTrip?.endDate, maxActDay);
+  const currentTripDay = tripTemporal.currentDay; // number si le voyage est EN COURS aujourd'hui, null si futur ou passé
 
-  // Initialiser automatiquement au jour courant du séjour lors du changement de voyage
+  // Fonction helper pour obtenir la date réelle d'un jour spécifique du voyage
+  const getDayDate = useCallback((day: number): Date => {
+    if (!activeTrip?.startDate) return new Date();
+    return getDateForTripDay(activeTrip.startDate, day);
+  }, [activeTrip?.startDate]);
+
+  // Initialiser automatiquement au jour courant si le voyage est en cours, sinon Jour 1
   useEffect(() => {
     if (activeTrip) {
-      const currentDay = getCurrentDayOfTrip();
-      setSelectedDay(currentDay);
+      if (tripTemporal.isCurrent && tripTemporal.currentDay) {
+        setSelectedDay(tripTemporal.currentDay);
+      } else {
+        setSelectedDay(1);
+      }
     }
-  }, [activeTrip?.id]);
+  }, [activeTrip?.id, tripTemporal.currentDay, tripTemporal.isCurrent]);
 
   // Horloge en direct mise à jour toutes les 10 secondes
   useEffect(() => {
@@ -294,10 +301,8 @@ export const ActivitiesView: React.FC = () => {
 
   const getDaysArray = () => {
     if (!activeTrip) return [1];
-    const d1 = new Date(activeTrip.startDate);
-    const d2 = new Date(activeTrip.endDate);
-    const diffDays = Math.max(1, Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-    return Array.from({ length: diffDays }, (_, i) => i + 1);
+    const totalDays = tripTemporal.totalDays || 1;
+    return Array.from({ length: totalDays }, (_, i) => i + 1);
   };
 
   const days = getDaysArray();
@@ -593,8 +598,7 @@ export const ActivitiesView: React.FC = () => {
     e.preventDefault();
     if (!editingActivity || !activeTrip) return;
 
-    const tripStart = new Date(activeTrip.startDate);
-    const actDate = new Date(tripStart.getTime() + (Number(dayNumber) - 1) * 86400000).toISOString().split('T')[0];
+    const actDate = formatLocalDate(getDayDate(Number(dayNumber)));
 
     await api.activities.update(editingActivity.id, {
       title,
@@ -616,8 +620,7 @@ export const ActivitiesView: React.FC = () => {
     e.preventDefault();
     if (!activeTrip) return;
 
-    const tripStart = new Date(activeTrip.startDate);
-    const actDate = new Date(tripStart.getTime() + (Number(dayNumber) - 1) * 86400000).toISOString().split('T')[0];
+    const actDate = formatLocalDate(getDayDate(Number(dayNumber)));
 
     await api.activities.create({
       tripId: activeTrip.id,
@@ -694,21 +697,22 @@ export const ActivitiesView: React.FC = () => {
   // Calcul temps réel & statut dynamique des activités sur TOUT le séjour
   const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
   const timeFormatted = `${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
-  const todayDateStr = currentTime.toISOString().split('T')[0];
-  const currentTripDay = getCurrentDayOfTrip();
+  const todayDateStr = getTodayLocalDateStr();
 
   // Position temporelle du jour sélectionné
-  const isSelectedDayPast = selectedDay < currentTripDay;
-  const isSelectedDayToday = selectedDay === currentTripDay;
-  const isSelectedDayFuture = selectedDay > currentTripDay;
+  const isSelectedDayPast = tripTemporal.isPast || (tripTemporal.isCurrent && currentTripDay !== null && selectedDay < currentTripDay);
+  const isSelectedDayToday = tripTemporal.isCurrent && currentTripDay !== null && selectedDay === currentTripDay;
+  const isSelectedDayFuture = tripTemporal.isFuture || (tripTemporal.isCurrent && currentTripDay !== null && selectedDay > currentTripDay);
 
-  // Activités prévues AUJOURD'HUI sur l'ensemble du séjour (date réelle d'aujourd'hui)
-  const todayTripActivities = activities.filter(act => {
-    if (act.date) {
-      return act.date.split('T')[0] === todayDateStr;
-    }
-    return act.dayNumber === currentTripDay;
-  }).sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+  // Activités prévues AUJOURD'HUI (strictement si le voyage est EN COURS aujourd'hui)
+  const todayTripActivities = (tripTemporal.isCurrent && currentTripDay !== null)
+    ? activities.filter(act => {
+        if (act.date) {
+          return act.date.split('T')[0] === todayDateStr;
+        }
+        return act.dayNumber === currentTripDay;
+      }).sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))
+    : [];
 
   // Détection de la prochaine activité d'aujourd'hui pour l'alerte email automatique
   const todayUpcoming = todayTripActivities
@@ -717,7 +721,7 @@ export const ActivitiesView: React.FC = () => {
 
   const todayNextActivity = todayUpcoming[0] || null;
   const todayMinUntilNext = todayNextActivity ? timeToMinutes(todayNextActivity.startTime) - nowMin : null;
-  const isTodayImminent = todayMinUntilNext !== null && todayMinUntilNext > 0 && todayMinUntilNext <= 10;
+  const isTodayImminent = isSelectedDayToday && todayMinUntilNext !== null && todayMinUntilNext > 0 && todayMinUntilNext <= 10;
 
   // Effet d'alerte automatique par email à 10 minutes du départ (exclusivement pour les activités d'aujourd'hui)
   useEffect(() => {
@@ -843,11 +847,11 @@ export const ActivitiesView: React.FC = () => {
                   <span>•</span>
                   <span>
                     {isSelectedDayToday ? (
-                      <span className="text-teal-300 font-semibold">Jour {selectedDay} (Aujourd'hui)</span>
+                      <span className="text-teal-300 font-semibold">Jour {selectedDay} (Aujourd'hui • {formatDayShort(getDayDate(selectedDay))})</span>
                     ) : isSelectedDayPast ? (
-                      <span className="text-slate-400">Jour {selectedDay} (Passé)</span>
+                      <span className="text-slate-400">Jour {selectedDay} (Passé • {formatDayShort(getDayDate(selectedDay))})</span>
                     ) : (
-                      <span className="text-indigo-300">Jour {selectedDay} (À venir)</span>
+                      <span className="text-indigo-300">Jour {selectedDay} (À venir • {formatDayShort(getDayDate(selectedDay))})</span>
                     )} • {activeTrip.title || activeTrip.destination}
                   </span>
                 </div>
@@ -865,7 +869,7 @@ export const ActivitiesView: React.FC = () => {
           </div>
 
           {/* Rappel compact si alerte imminente sur le jour réel pendant la consultation d'un autre jour */}
-          {!isSelectedDayToday && isTodayImminent && todayNextActivity && (
+          {!isSelectedDayToday && isTodayImminent && todayNextActivity && currentTripDay !== null && (
             <div className="p-3.5 rounded-xl bg-gradient-to-r from-rose-950/90 via-amber-950/80 to-rose-950/90 border border-rose-500/60 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 animate-pulse">
               <div className="flex items-center space-x-2">
                 <BellRing className="w-4 h-4 text-rose-400 flex-shrink-0" />
@@ -882,19 +886,61 @@ export const ActivitiesView: React.FC = () => {
             </div>
           )}
 
-          {/* Affichage différencié selon le jour consulté : Passé / Futur / Aujourd'hui */}
-          {isSelectedDayPast ? (
+          {/* Affichage différencié selon le statut global du voyage et le jour consulté */}
+          {tripTemporal.isFuture ? (
+            <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 flex-shrink-0">
+                  <CalendarDays className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-white text-sm">
+                      Voyage planifié dans {tripTemporal.daysDifference} jour{tripTemporal.daysDifference > 1 ? 's' : ''}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-semibold text-[10px] border border-indigo-500/30">
+                      Départ le {formatDayFull(tripTemporal.startDate)}
+                    </span>
+                  </div>
+                  <p className="text-slate-400 text-xs mt-0.5">
+                    Le voyage n'a pas encore débuté. Vous consultez l'agenda prévu pour le <strong>Jour {selectedDay} ({formatDayShort(getDayDate(selectedDay))})</strong>. Le suivi en direct s'activera automatiquement le Jour 1.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : tripTemporal.isPast ? (
+            <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-slate-800 text-slate-400 flex-shrink-0">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-white text-sm">
+                      Voyage achevé (Terminé il y a {tripTemporal.daysDifference} jour{tripTemporal.daysDifference > 1 ? 's' : ''})
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-semibold text-[10px] border border-slate-700">
+                      Achevé le {formatDayFull(tripTemporal.endDate)}
+                    </span>
+                  </div>
+                  <p className="text-slate-400 text-xs mt-0.5">
+                    Toutes les étapes de ce séjour sont passées. Vous consultez l'historique du <strong>Jour {selectedDay} ({formatDayShort(getDayDate(selectedDay))})</strong>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : isSelectedDayPast ? (
             <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div className="flex items-center space-x-2.5">
                 <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 </div>
                 <div>
-                  <span className="font-bold text-white">Jour {selectedDay} terminé (Journée passée)</span>
+                  <span className="font-bold text-white">Jour {selectedDay} terminé (Passé • {formatDayShort(getDayDate(selectedDay))})</span>
                   <p className="text-slate-400 text-[11px] mt-0.5">Toutes les étapes de cette journée sont achevées.</p>
                 </div>
               </div>
-              {currentTripDay !== selectedDay && (
+              {currentTripDay !== null && currentTripDay !== selectedDay && (
                 <button
                   onClick={() => setSelectedDay(currentTripDay)}
                   className="px-3 py-1.5 bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors self-start sm:self-auto"
@@ -911,11 +957,11 @@ export const ActivitiesView: React.FC = () => {
                   <CalendarDays className="w-4 h-4" />
                 </div>
                 <div>
-                  <span className="font-bold text-white">Jour {selectedDay} à venir</span>
+                  <span className="font-bold text-white">Jour {selectedDay} à venir ({formatDayShort(getDayDate(selectedDay))})</span>
                   <p className="text-slate-400 text-[11px] mt-0.5">{currentDayActivities.length} activité(s) planifiée(s) pour cette journée.</p>
                 </div>
               </div>
-              {currentTripDay !== selectedDay && (
+              {currentTripDay !== null && currentTripDay !== selectedDay && (
                 <button
                   onClick={() => setSelectedDay(currentTripDay)}
                   className="px-3 py-1.5 bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors self-start sm:self-auto"
@@ -1052,14 +1098,15 @@ export const ActivitiesView: React.FC = () => {
         {days.map(d => {
           const actsForD = activities.filter(a => a.dayNumber === d);
           const hasConflict = getConflicts(d).length > 0;
-          const isDayToday = d === currentTripDay;
-          const isDayPast = d < currentTripDay;
+          const dayDate = getDayDate(d);
+          const isDayToday = tripTemporal.isCurrent && currentTripDay !== null && d === currentTripDay;
+          const isDayPast = tripTemporal.isPast || (tripTemporal.isCurrent && currentTripDay !== null && d < currentTripDay);
 
           return (
             <button
               key={d}
               onClick={() => setSelectedDay(d)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold flex-shrink-0 transition-all border flex items-center space-x-2 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold flex-shrink-0 transition-all border flex items-center space-x-2.5 ${
                 selectedDay === d
                   ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-md shadow-teal-500/20'
                   : isDayToday
@@ -1067,23 +1114,33 @@ export const ActivitiesView: React.FC = () => {
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
               }`}
             >
-              <span>Jour {d}</span>
-              {isDayToday && (
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider ${
-                  selectedDay === d ? 'bg-slate-950 text-teal-300' : 'bg-teal-400 text-slate-950'
+              <div className="flex flex-col items-start text-left">
+                <div className="flex items-center space-x-1.5">
+                  <span>Jour {d}</span>
+                  {isDayToday && (
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider ${
+                      selectedDay === d ? 'bg-slate-950 text-teal-300' : 'bg-teal-400 text-slate-950'
+                    }`}>
+                      Aujourd'hui
+                    </span>
+                  )}
+                  {isDayPast && (
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+                      selectedDay === d ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                    }`}>
+                      ✓ Fait
+                    </span>
+                  )}
+                </div>
+                <span className={`text-[10px] font-medium capitalize ${
+                  selectedDay === d ? 'text-slate-900' : 'text-slate-500'
                 }`}>
-                  Aujourd'hui
+                  {formatDayShort(dayDate)}
                 </span>
-              )}
-              {isDayPast && (
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
-                  selectedDay === d ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
-                }`}>
-                  ✓ Fait
-                </span>
-              )}
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                selectedDay === d ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+              </div>
+
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full self-center ${
+                selectedDay === d ? 'bg-slate-950/20 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'
               }`}>
                 {actsForD.length}
               </span>
@@ -1140,7 +1197,7 @@ export const ActivitiesView: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center space-x-2">
-            <span className="text-slate-400">Progression du Jour {selectedDay} :</span>
+            <span className="text-slate-400">Progression du Jour {selectedDay} ({formatDayShort(getDayDate(selectedDay))}) :</span>
             <span className="font-bold text-white">
               {completedCount} / {currentDayActivities.length} activités réalisées
             </span>

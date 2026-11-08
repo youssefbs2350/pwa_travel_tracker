@@ -22,10 +22,9 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onOpenNewTripModal, onNavigateTab }) => {
-  const { currentUser, isAdmin, updateUserRole, allUsers, switchUser, logout } = useAuth();
+  const { currentUser, isAdmin, logout } = useAuth();
   const { trips, activeTrip, setActiveTripId } = useTrips();
   const { canInstall, isInstalled, promptInstall } = useOffline();
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showTripDropdown, setShowTripDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
@@ -39,21 +38,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenNewTripModal, onNavigateTa
     } else {
       setShowInstallModal(true);
     }
-  };
-
-  const roles: UserRole[] = ['Traveler', 'Organizer', 'Admin'];
-
-  const handleRoleChange = async (newRole: UserRole) => {
-    if (!currentUser) return;
-    if (!isAdmin) {
-      alert("Action refusÃ©e : Seul un Administrateur (Admin) a l'autorisation de modifier les rÃ´les.");
-      return;
-    }
-    const res = await updateUserRole(currentUser.id, newRole);
-    if (!res.success) {
-      alert(res.message);
-    }
-    setShowRoleDropdown(false);
   };
 
   return (
@@ -159,47 +143,30 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenNewTripModal, onNavigateTa
                 </button>
               )}
 
-              {/* Role Badge: STRICT ADMIN PERMISSION */}
-              {isAdmin ? (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowRoleDropdown(prev => !prev)}
-                    className="flex items-center space-x-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 rounded-xl px-2.5 py-1.5 text-xs text-amber-300 transition-colors"
-                    title="En tant qu'Admin, vous pouvez modifier les rôles"
-                  >
-                    <Shield className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="font-bold">Admin (Gestionnaire des Rôles)</span>
-                    <ChevronDown className="w-3 h-3 text-amber-400" />
-                  </button>
-
-                  {showRoleDropdown && (
-                    <div className="absolute right-0 mt-2 w-52 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-1.5 z-50 text-xs">
-                      <div className="px-3 py-1.5 font-semibold text-slate-400 border-b border-slate-800">
-                        Modifier mon rôle (Admin)
-                      </div>
-                      {roles.map(r => (
-                        <button
-                          key={r}
-                          onClick={() => handleRoleChange(r)}
-                          className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-800 ${
-                            currentUser?.role === r ? 'text-amber-400 font-bold bg-amber-500/10' : 'text-slate-300'
-                          }`}
-                        >
-                          <span>{r}</span>
-                          {currentUser?.role === r && <UserCheck className="w-3.5 h-3.5" />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+              {/* Role Badge: Affichage fixe sécurisé du rôle du compte connecté */}
+              {currentUser?.role === 'Admin' ? (
+                <div 
+                  className="flex items-center space-x-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl px-2.5 py-1.5 text-xs text-amber-300 select-none shadow-sm"
+                  title="Session Administrateur active"
+                >
+                  <Shield className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="font-bold">Admin</span>
+                </div>
+              ) : currentUser?.role === 'Organizer' ? (
+                <div 
+                  className="flex items-center space-x-1.5 bg-sky-500/10 border border-sky-500/30 rounded-xl px-2.5 py-1.5 text-xs text-sky-300 select-none shadow-sm"
+                  title="Session Organisateur active"
+                >
+                  <Shield className="w-3.5 h-3.5 text-sky-400" />
+                  <span className="font-semibold">Organizer</span>
                 </div>
               ) : (
-                /* Non-admin: Locked Role Badge */
                 <div 
                   className="flex items-center space-x-1.5 bg-slate-800/80 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-300 select-none"
-                  title="Rôle verrouillé. Seul l'administrateur peut modifier les rôles."
+                  title="Session Voyageur active"
                 >
                   <Lock className="w-3 h-3 text-slate-400" />
-                  <span className="font-semibold">{currentUser?.role}</span>
+                  <span className="font-semibold">Traveler</span>
                 </div>
               )}
 
@@ -253,37 +220,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenNewTripModal, onNavigateTa
                           <Shield className="w-3.5 h-3.5 text-amber-400" />
                           <span>Gestion Utilisateurs (Admin)</span>
                         </button>
-                      )}
-
-                      {/* Quick Switch Profile (Demo & Testing) */}
-                      {allUsers.length > 1 && (
-                        <div className="border-t border-slate-800 pt-1.5 mt-1">
-                          <p className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                            Changer de compte
-                          </p>
-                          <div className="space-y-0.5 max-h-40 overflow-y-auto">
-                            {allUsers.map(u => (
-                              <button
-                                key={u.id}
-                                onClick={() => {
-                                  setShowUserMenu(false);
-                                  switchUser(u.id);
-                                }}
-                                className={`w-full text-left px-3 py-1.5 flex items-center justify-between rounded-lg transition-colors ${
-                                  currentUser?.id === u.id
-                                    ? 'bg-amber-500/15 text-amber-300 font-bold'
-                                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                                }`}
-                              >
-                                <div className="flex items-center space-x-2 truncate">
-                                  <img src={u.avatar} alt={u.name} className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
-                                  <span className="truncate">{u.name} ({u.role})</span>
-                                </div>
-                                {currentUser?.id === u.id && <UserCheck className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
                       )}
 
                       <div className="border-t border-slate-800 pt-1 mt-1">

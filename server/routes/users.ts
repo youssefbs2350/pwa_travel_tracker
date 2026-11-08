@@ -13,9 +13,9 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const requesterRole = req.headers['x-user-role'] as string;
     
-    // Si l'utilisateur n'est pas Admin, il ne peut pas lister tous les comptes
-    if (requesterRole && requesterRole !== 'Admin') {
-      return res.status(403).json({ error: 'Accès interdit : Seul l’administrateur peut consulter la liste des utilisateurs.' });
+    // Si l'utilisateur n'est pas Admin, interdire strictement l'accès à la liste des comptes
+    if (requesterRole !== 'Admin') {
+      return res.status(403).json({ error: 'Accès interdit : Seul l’administrateur peut consulter la liste des comptes utilisateurs.' });
     }
 
     const users = await UserModel.find().select('-password -resetPasswordCode -resetPasswordExpires').sort({ createdAt: -1 });

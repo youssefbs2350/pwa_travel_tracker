@@ -114,7 +114,13 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ onNavigateTab }) => 
                 </span>
                 <span className="flex items-center space-x-1.5">
                   <Users className="w-4 h-4 text-amber-400" />
-                  <span>{activeTrip.participants.join(', ')}</span>
+                  {currentUser?.role === 'Traveler' ? (
+                    <span>{activeTrip.participants.length} participant{activeTrip.participants.length > 1 ? 's' : ''}</span>
+                  ) : (
+                    <span title="Participants du voyage (Admin / Organisateur)">
+                      <strong>{activeTrip.participants.length} participants :</strong> {activeTrip.participants.join(', ')}
+                    </span>
+                  )}
                 </span>
               </div>
             </div>

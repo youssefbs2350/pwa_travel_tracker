@@ -42135,8 +42135,8 @@ var EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 router.get("/", async (req, res) => {
   try {
     const requesterRole = req.headers["x-user-role"];
-    if (requesterRole && requesterRole !== "Admin") {
-      return res.status(403).json({ error: "Acc\xE8s interdit : Seul l\u2019administrateur peut consulter la liste des utilisateurs." });
+    if (requesterRole !== "Admin") {
+      return res.status(403).json({ error: "Acc\xE8s interdit : Seul l\u2019administrateur peut consulter la liste des comptes utilisateurs." });
     }
     const users = await UserModel.find().select("-password -resetPasswordCode -resetPasswordExpires").sort({ createdAt: -1 });
     res.json(users);
@@ -42567,10 +42567,21 @@ function buildIdFilter(id) {
 }
 router3.get("/", async (req, res) => {
   try {
-    const { tripId } = req.query;
+    const tripId = req.query.tripId;
     const query = tripId ? { tripId } : {};
     const places = await PlaceModel.find(query).sort({ createdAt: -1 });
     res.json(places);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router3.get("/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const filter = buildIdFilter(id);
+    const place = await PlaceModel.findOne(filter);
+    if (!place) return res.status(404).json({ error: "Lieu introuvable" });
+    res.json({ ...place.toObject(), id: place.id || place._id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -42588,11 +42599,23 @@ router3.post("/", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router3.put("/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const filter = buildIdFilter(id);
+    const updated = await PlaceModel.findOneAndUpdate(filter, req.body, { new: true });
+    if (!updated) return res.status(404).json({ error: "Lieu introuvable" });
+    res.json({ ...updated.toObject(), id: updated.id || updated._id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 router3.delete("/:id", async (req, res) => {
   try {
-    const filter = buildIdFilter(req.params.id);
-    await PlaceModel.findOneAndDelete(filter);
-    res.json({ message: "Lieu supprim\xE9 de MongoDB" });
+    const id = req.params.id;
+    const filter = buildIdFilter(id);
+    const deleted = await PlaceModel.findOneAndDelete(filter);
+    res.json({ message: "Lieu supprim\xE9", deleted: !!deleted });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -42631,12 +42654,12 @@ async function checkAndSendDueActivityAlerts() {
     if (act.date) {
       activityDateStr = act.date.includes("T") ? act.date.split("T")[0] : act.date.trim();
     } else if (trip?.startDate) {
-      const tripStart = new Date(trip.startDate);
+      const [y, m, d] = trip.startDate.split("T")[0].split("-").map(Number);
       const dayOffset = Math.max(0, (Number(act.dayNumber) || 1) - 1);
-      const computedDate = new Date(tripStart.getTime() + dayOffset * 864e5);
+      const computedDate = new Date(Date.UTC(y, m - 1, d + dayOffset));
       activityDateStr = computedDate.toISOString().split("T")[0];
     }
-    const isToday = !activityDateStr || activityDateStr === todayUtc || activityDateStr === todayLocal;
+    const isToday = activityDateStr ? activityDateStr === todayUtc || activityDateStr === todayLocal : false;
     if (!isToday) {
       continue;
     }

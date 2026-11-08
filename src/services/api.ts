@@ -264,6 +264,24 @@ export const api = {
       return localPlace;
     },
 
+    async update(id: string, updates: Partial<Place>): Promise<void> {
+      await db.places.update(id, updates);
+      try {
+        await fetch(`/api/places/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+      } catch {
+        await db.syncQueue.add({
+          type: 'UPDATE',
+          collection: 'places',
+          data: { id, ...updates },
+          timestamp: new Date().toISOString()
+        });
+      }
+    },
+
     async delete(id: string): Promise<void> {
       await db.places.delete(id);
       try {

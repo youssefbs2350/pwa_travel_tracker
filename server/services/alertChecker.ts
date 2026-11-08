@@ -56,15 +56,15 @@ export async function checkAndSendDueActivityAlerts(): Promise<{
     if (act.date) {
       activityDateStr = act.date.includes('T') ? act.date.split('T')[0] : act.date.trim();
     } else if (trip?.startDate) {
-      // Déduire la date réelle : startDate + (dayNumber - 1) jours
-      const tripStart = new Date(trip.startDate);
+      // Déduire la date réelle en UTC : startDate + (dayNumber - 1) jours
+      const [y, m, d] = trip.startDate.split('T')[0].split('-').map(Number);
       const dayOffset = Math.max(0, (Number(act.dayNumber) || 1) - 1);
-      const computedDate = new Date(tripStart.getTime() + dayOffset * 86400000);
+      const computedDate = new Date(Date.UTC(y, m - 1, d + dayOffset));
       activityDateStr = computedDate.toISOString().split('T')[0];
     }
 
-    // 3. Vérification si l'activité a lieu AUJOURD'HUI (pour n'importe quel jour du séjour)
-    const isToday = !activityDateStr || activityDateStr === todayUtc || activityDateStr === todayLocal;
+    // 3. Vérification si l'activité a lieu AUJOURD'HUI (strictement sur la date réelle d'aujourd'hui)
+    const isToday = activityDateStr ? (activityDateStr === todayUtc || activityDateStr === todayLocal) : false;
     if (!isToday) {
       continue;
     }
