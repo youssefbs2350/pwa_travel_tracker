@@ -21,6 +21,7 @@ export interface AiGeneratedTripResult {
   expenses: Omit<Expense, 'id' | 'tripId' | 'createdAt'>[];
 }
 
+
 interface CuratedPoi {
   name: string;
   category: Place['category'];

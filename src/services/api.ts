@@ -211,8 +211,6 @@ export const api = {
           const list = await res.json();
           if (list.length > 0) {
             const formatted = list.map((p: any) => ({ ...p, id: p.id || p._id }));
-            // Ne réinjecte que les lieux qui ne sont PAS déjà supprimés localement
-            // (évite que MongoDB "ressuscite" des lieux supprimés offline)
             await db.places.bulkPut(formatted);
             return formatted;
           } else if (localPlaces.length > 0) {
@@ -230,56 +228,6 @@ export const api = {
         console.log('[API] Lieux récupérés depuis IndexedDB');
       }
       return localPlaces;
-    },
-
-    async update(id: string, updates: Partial<Place>): Promise<Place | null> {
-      // Met à jour IndexedDB immédiatement
-      await db.places.update(id, updates);
-      try {
-        const res = await fetch(`/api/places/${encodeURIComponent(id)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updates)
-        });
-        if (res.ok) {
-          const updated = await res.json();
-          const final = { ...updated, id: updated._id || updated.id };
-          await db.places.put(final);
-          return final;
-        }
-      } catch {
-        await db.syncQueue.add({
-          type: 'UPDATE',
-          collection: 'places',
-          data: { id, ...updates },
-          timestamp: new Date().toISOString()
-        });
-      }
-      return null;
-    },
-
-    async delete(id: string): Promise<void> {
-      // 1. Supprime immédiatement de IndexedDB
-      await db.places.delete(id);
-
-      // 2. Cherche le vrai _id MongoDB dans IndexedDB (avant suppression)
-      // L'id peut être un ObjectId MongoDB ou un id custom (plc-sug-xxx)
-      try {
-        // Essaie suppression par _id MongoDB direct
-        const res = await fetch(`/api/places/${encodeURIComponent(id)}`, { method: 'DELETE' });
-        if (res.ok) {
-          console.log('[API] Lieu supprimé de MongoDB:', id);
-          return;
-        }
-      } catch {
-        // Ajoute à la file de sync si offline
-        await db.syncQueue.add({
-          type: 'DELETE',
-          collection: 'places',
-          data: { id },
-          timestamp: new Date().toISOString()
-        });
-      }
     },
 
     async create(place: Omit<Place, 'id' | 'createdAt'>): Promise<Place> {
@@ -319,10 +267,7 @@ export const api = {
     async delete(id: string): Promise<void> {
       await db.places.delete(id);
       try {
-        const res = await fetch(`/api/places/${encodeURIComponent(id)}`, { method: 'DELETE' });
-        if (!res.ok) {
-          console.log('[API] Suppression MongoDB échouée pour id:', id);
-        }
+        await fetch(`/api/places/${id}`, { method: 'DELETE' });
       } catch {
         await db.syncQueue.add({
           type: 'DELETE',

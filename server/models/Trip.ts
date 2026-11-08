@@ -51,3 +51,4 @@ const TripSchema = new Schema<ITrip>({
 });
 
 export const TripModel = (mongoose.models.Trip as mongoose.Model<ITrip>) || mongoose.model<ITrip>('Trip', TripSchema);
+
