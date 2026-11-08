@@ -16,9 +16,6 @@ import {
   Wallet,
   Camera,
   Users,
-  Sparkles,
-  ShieldCheck,
-  Globe2,
   ChevronRight,
   ChevronLeft
 } from 'lucide-react';
@@ -232,26 +229,12 @@ export const AuthScreen: React.FC = () => {
             <div>
               <div className="flex items-center space-x-2">
                 <span className="font-extrabold text-lg text-white tracking-tight">Travel Tracker</span>
-                <span className="text-[10px] font-bold bg-brand-500/20 text-brand-300 border border-brand-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  PWA 2.0
-                </span>
               </div>
               <p className="text-[11px] text-slate-400 hidden sm:block">Planification intelligente de vos voyages</p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3 text-xs">
-            <div className="hidden md:flex items-center space-x-4 text-slate-400">
-              <span className="flex items-center space-x-1">
-                <Globe2 className="w-3.5 h-3.5 text-brand-400" />
-                <span>Multi-Devises</span>
-              </span>
-              <span className="flex items-center space-x-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Sécurisé JWT</span>
-              </span>
-            </div>
-          </div>
+
         </div>
       </header>
 
@@ -264,11 +247,7 @@ export const AuthScreen: React.FC = () => {
             
             {/* Tagline */}
             <div className="space-y-3">
-              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-300 text-xs font-semibold">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Nouvelle Génération • Organisation de Séjours</span>
-              </div>
-              
+
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight text-white">
                 Planifiez, vivez et partagez vos voyages <span className="bg-gradient-to-r from-brand-400 via-sky-300 to-amber-300 bg-clip-text text-transparent">sans friction</span>.
               </h1>
