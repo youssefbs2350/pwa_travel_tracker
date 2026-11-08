@@ -98,7 +98,7 @@ export async function initializeDatabase() {
       budgetTotal: 3200,
       currency: 'EUR',
       status: 'En cours' as const,
-      participants: ['Youssef', 'Chaima', 'Ameni'],
+      participants: ['Youssef'],
       itinerarySummary: 'Circuit combinant temples historiques, gastronomie raffinée et modernité tokyoïte.',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

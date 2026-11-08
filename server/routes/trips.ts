@@ -280,7 +280,7 @@ router.post('/generate', async (req: Request, res: Response) => {
       budgetTotal: days * (pace === 'Intense' ? 220 : 160),
       currency: 'EUR',
       status: 'Planifié',
-      participants: ['Moi', 'Compagnon de voyage'],
+      participants: req.body.userName ? [req.body.userName] : (Array.isArray(req.body.participants) && req.body.participants.length > 0 ? req.body.participants : []),
       itinerarySummary: `Circuit optimisé généré par IA pour un rythme ${pace} sur ${days} jours.`
     });
     await trip.save();

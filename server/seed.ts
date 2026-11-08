@@ -58,7 +58,7 @@ export async function seedMongoDBIfEmpty() {
     budgetTotal: 3200,
     currency: 'EUR',
     status: 'En cours',
-    participants: ['Youssef', 'Chaima', 'Hedi', 'Nour'],
+    participants: ['Youssef'],
     itinerarySummary: 'Itinéraire optimisé sur 10 jours couvrant les sanctuaires, Shibuya, et les temples de Kyoto.'
   });
 
@@ -73,7 +73,7 @@ export async function seedMongoDBIfEmpty() {
     budgetTotal: 1800,
     currency: 'TND',
     status: 'Planifié',
-    participants: ['Ameni', 'Nourhene', 'Amine'],
+    participants: ['Ameni'],
     itinerarySummary: 'Détente en bord de mer, Djerbahood et coucher de soleil sur la lagune.'
   });
 

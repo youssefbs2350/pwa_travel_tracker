@@ -28789,7 +28789,7 @@ async function seedMongoDBIfEmpty() {
     budgetTotal: 3200,
     currency: "EUR",
     status: "En cours",
-    participants: ["Youssef", "Chaima", "Hedi", "Nour"],
+    participants: ["Youssef"],
     itinerarySummary: "Itin\xE9raire optimis\xE9 sur 10 jours couvrant les sanctuaires, Shibuya, et les temples de Kyoto."
   });
   const trip2 = await TripModel.create({
@@ -28803,7 +28803,7 @@ async function seedMongoDBIfEmpty() {
     budgetTotal: 1800,
     currency: "TND",
     status: "Planifi\xE9",
-    participants: ["Ameni", "Nourhene", "Amine"],
+    participants: ["Ameni"],
     itinerarySummary: "D\xE9tente en bord de mer, Djerbahood et coucher de soleil sur la lagune."
   });
   const p1 = await PlaceModel.create({
@@ -42554,7 +42554,7 @@ router2.post("/generate", async (req, res) => {
       budgetTotal: days * (pace === "Intense" ? 220 : 160),
       currency: "EUR",
       status: "Planifi\xE9",
-      participants: ["Moi", "Compagnon de voyage"],
+      participants: req.body.userName ? [req.body.userName] : Array.isArray(req.body.participants) && req.body.participants.length > 0 ? req.body.participants : [],
       itinerarySummary: `Circuit optimis\xE9 g\xE9n\xE9r\xE9 par IA pour un rythme ${pace} sur ${days} jours.`
     });
     await trip.save();
