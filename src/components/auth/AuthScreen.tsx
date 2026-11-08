@@ -17,9 +17,12 @@ import {
   Camera,
   Users,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 
 type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
 
@@ -52,6 +55,7 @@ const SHOWCASE_DESTINATIONS = [
 
 export const AuthScreen: React.FC = () => {
   const { login, register, forgotPassword, resetPassword } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   
   const [mode, setMode] = useState<AuthMode>('LOGIN');
   const [activeSlide, setActiveSlide] = useState(0);
@@ -234,7 +238,17 @@ export const AuthScreen: React.FC = () => {
             </div>
           </div>
 
-
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 text-amber-400 hover:text-amber-300 transition-all hover:scale-105 active:scale-95 shadow-sm"
+              title={theme === 'dark' ? 'Activer le Mode Jour (Day Mode)' : 'Activer le Mode Nuit (Night Mode)'}
+              aria-label="Basculer le mode jour / nuit"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-300" /> : <Moon className="w-4 h-4 text-slate-700" />}
+            </button>
+          </div>
         </div>
       </header>
 

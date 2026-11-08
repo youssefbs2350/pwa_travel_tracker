@@ -11,12 +11,16 @@ import {
   Copy, 
   CheckCircle2,
   Mail,
-  Calendar
+  Calendar,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 
 export const UserProfileView: React.FC = () => {
   const { currentUser, updatePreferences } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [copiedToken, setCopiedToken] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -196,6 +200,46 @@ export const UserProfileView: React.FC = () => {
                     {p === 'Relaxed' ? 'Relaxé' : p === 'Balanced' ? 'Équilibré' : 'Intensif'}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Appearance Mode (Day / Night) */}
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
+                <Sun className="w-4 h-4 text-amber-400" />
+                <span>Thème & Mode d'affichage :</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTheme('light');
+                    updatePreferences({ theme: 'light' });
+                  }}
+                  className={`py-2 px-3 text-xs font-semibold rounded-xl border flex items-center justify-center space-x-2 transition-all ${
+                    theme === 'light'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-bold'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                >
+                  <Sun className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Mode Jour (Day Mode)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTheme('dark');
+                    updatePreferences({ theme: 'dark' });
+                  }}
+                  className={`py-2 px-3 text-xs font-semibold rounded-xl border flex items-center justify-center space-x-2 transition-all ${
+                    theme === 'dark'
+                      ? 'bg-brand-600 text-white border-brand-500 shadow-md font-bold'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                >
+                  <Moon className="w-3.5 h-3.5 text-brand-300" />
+                  <span>Mode Nuit (Night Mode)</span>
+                </button>
               </div>
             </div>
 

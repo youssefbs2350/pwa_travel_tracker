@@ -5,7 +5,7 @@
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 antialiased min-h-screen selection:bg-brand-500 selection:text-white font-sans;
+    @apply bg-slate-950 text-slate-100 antialiased min-h-screen selection:bg-brand-500 selection:text-white font-sans transition-colors duration-200;
   }
 }
 
@@ -43,4 +43,152 @@
 
 .leaflet-popup-tip {
   background: #1e293b !important;
+}
+
+/* ========================================================================= */
+/* DAY MODE (LIGHT THEME) OVERRIDES                                          */
+/* ========================================================================= */
+html.light,
+html.light body {
+  background-color: #f8fafc !important; /* slate-50 */
+  color: #0f172a !important; /* slate-900 */
+}
+
+/* Base backgrounds */
+html.light .bg-slate-950,
+html.light .bg-slate-950\/90,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/70 {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-slate-900,
+html.light .bg-slate-900\/95,
+html.light .bg-slate-900\/90,
+html.light .bg-slate-900\/80,
+html.light .bg-slate-900\/70,
+html.light .bg-slate-900\/60 {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-slate-850,
+html.light .bg-slate-800,
+html.light .bg-slate-800\/90,
+html.light .bg-slate-800\/80,
+html.light .bg-slate-800\/70,
+html.light .bg-slate-800\/60,
+html.light .bg-slate-800\/50,
+html.light .bg-slate-800\/40 {
+  background-color: #f1f5f9 !important; /* slate-100 */
+}
+
+html.light .bg-slate-700,
+html.light .bg-slate-750 {
+  background-color: #e2e8f0 !important; /* slate-200 */
+}
+
+/* Hover states */
+html.light .hover\:bg-slate-800:hover,
+html.light .hover\:bg-slate-800\/80:hover {
+  background-color: #e2e8f0 !important;
+}
+html.light .hover\:bg-slate-700:hover {
+  background-color: #cbd5e1 !important;
+}
+
+/* Borders */
+html.light .border-slate-800,
+html.light .border-slate-800\/80,
+html.light .border-slate-800\/60,
+html.light .border-slate-700,
+html.light .border-slate-700\/60,
+html.light .border-slate-700\/80,
+html.light .border-slate-600 {
+  border-color: #e2e8f0 !important; /* slate-200 */
+}
+
+/* Text Colors */
+html.light .text-white {
+  color: #0f172a !important; /* slate-900 */
+}
+html.light .text-slate-100 {
+  color: #0f172a !important;
+}
+html.light .text-slate-200 {
+  color: #1e293b !important;
+}
+html.light .text-slate-300 {
+  color: #334155 !important; /* slate-700 */
+}
+html.light .text-slate-400 {
+  color: #64748b !important; /* slate-500 */
+}
+html.light .text-slate-500 {
+  color: #64748b !important;
+}
+
+/* Keep white text on primary buttons, badges, gradients */
+html.light .bg-brand-600,
+html.light .bg-brand-500,
+html.light .bg-emerald-600,
+html.light .bg-emerald-500,
+html.light .bg-amber-600,
+html.light .bg-rose-600,
+html.light [class*="bg-gradient-to-"] {
+  color: #ffffff !important;
+}
+
+html.light .bg-brand-600 *,
+html.light .bg-brand-500 *,
+html.light .bg-emerald-600 *,
+html.light .bg-emerald-500 *,
+html.light .bg-amber-600 *,
+html.light .bg-rose-600 *,
+html.light [class*="bg-gradient-to-"] * {
+  color: #ffffff !important;
+}
+
+/* Inputs and forms in Day Mode */
+html.light input,
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Scrollbars in Day Mode */
+html.light ::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.8);
+}
+html.light ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.6);
+}
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
+}
+
+/* Leaflet in Day Mode */
+html.light .leaflet-container {
+  background-color: #f1f5f9 !important;
+}
+html.light .leaflet-popup-content-wrapper {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1) !important;
+}
+html.light .leaflet-popup-tip {
+  background: #ffffff !important;
+}
+
+/* Cards shadow in Day Mode */
+html.light .shadow-2xl,
+html.light .shadow-xl {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.07), 0 8px 10px -6px rgba(0, 0, 0, 0.04) !important;
 }

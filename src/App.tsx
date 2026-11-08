@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { TripProvider } from './context/TripContext';
 import { OfflineProvider } from './context/OfflineContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { initializeDatabase } from './db/database';
 import { Navbar } from './components/common/Navbar';
 import { Sidebar } from './components/common/Sidebar';
@@ -121,12 +122,14 @@ function AppContent() {
 
 export default function App() {
   return (
-    <OfflineProvider>
-      <AuthProvider>
-        <TripProvider>
-          <AppContent />
-        </TripProvider>
-      </AuthProvider>
-    </OfflineProvider>
+    <ThemeProvider>
+      <OfflineProvider>
+        <AuthProvider>
+          <TripProvider>
+            <AppContent />
+          </TripProvider>
+        </AuthProvider>
+      </OfflineProvider>
+    </ThemeProvider>
   );
 }

@@ -8,11 +8,14 @@ import {
   Plus, 
   Lock, 
   UserCheck,
-  Download
+  Download,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTrips } from '../../context/TripContext';
 import { useOffline } from '../../context/OfflineContext';
+import { useTheme } from '../../context/ThemeContext';
 import { PwaInstallModal } from './PwaInstallModal';
 import { UserRole } from '../../types';
 
@@ -25,6 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenNewTripModal, onNavigateTa
   const { currentUser, isAdmin, logout } = useAuth();
   const { trips, activeTrip, setActiveTripId } = useTrips();
   const { canInstall, isInstalled, promptInstall } = useOffline();
+  const { theme, toggleTheme } = useTheme();
   const [showTripDropdown, setShowTripDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
@@ -142,6 +146,20 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenNewTripModal, onNavigateTa
                   <span className="sm:hidden">Installer</span>
                 </button>
               )}
+
+              {/* Day / Night Mode Toggle */}
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 text-amber-400 hover:text-amber-300 transition-all hover:scale-105 active:scale-95 shadow-sm"
+                title={theme === 'dark' ? 'Activer le Mode Jour (Day Mode)' : 'Activer le Mode Nuit (Night Mode)'}
+                aria-label="Basculer le mode jour / nuit"
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-4 h-4 text-amber-300" />
+                ) : (
+                  <Moon className="w-4 h-4 text-slate-700" />
+                )}
+              </button>
 
               {/* Role Badge: Affichage fixe sécurisé du rôle du compte connecté */}
               {currentUser?.role === 'Admin' ? (
