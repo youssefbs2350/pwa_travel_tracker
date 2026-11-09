@@ -21,13 +21,13 @@ export interface ReadinessScore {
  * Analyse : Documents, Packing List, Planning, Budget, Assurance, Participants
  */
 export async function calculateTripReadiness(trip: Trip): Promise<ReadinessScore> {
-  const breakdown = {
-    documents: { score: 0, max: 20, status: 'missing' as const },
-    packing: { score: 0, max: 25, status: 'missing' as const },
-    activities: { score: 0, max: 20, status: 'missing' as const },
-    budget: { score: 0, max: 15, status: 'missing' as const },
-    insurance: { score: 0, max: 10, status: 'missing' as const },
-    participants: { score: 0, max: 10, status: 'missing' as const }
+  const breakdown: ReadinessScore['breakdown'] = {
+    documents: { score: 0, max: 20, status: 'missing' },
+    packing: { score: 0, max: 25, status: 'missing' },
+    activities: { score: 0, max: 20, status: 'missing' },
+    budget: { score: 0, max: 15, status: 'missing' },
+    insurance: { score: 0, max: 10, status: 'missing' },
+    participants: { score: 0, max: 10, status: 'missing' }
   };
 
   const suggestions: string[] = [];

@@ -197,7 +197,12 @@ export const FeaturesDemo: React.FC = () => {
                 WIDGET 4/4
               </span>
             </div>
-            <CollaborationPanel trip={trip} currentUser={demoUser} />
+            <CollaborationPanel 
+              trip={trip} 
+              currentUser={demoUser}
+              participants={trip.participants || []}
+              allUsers={[demoUser]} 
+            />
             <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800 text-xs text-slate-400">
               <strong className="text-white">Utilité :</strong> Expérience multiplayer unique - chat + participants en ligne + événements live
             </div>
