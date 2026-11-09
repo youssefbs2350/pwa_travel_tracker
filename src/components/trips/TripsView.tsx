@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Compass, 
   Plus, 
@@ -28,7 +28,25 @@ import {
   Shield,
   Layers,
   Search,
-  Upload
+  Upload,
+  Target,
+  Sun,
+  Cloud,
+  CloudRain,
+  CloudSnow,
+  CloudLightning,
+  CloudFog,
+  CloudDrizzle,
+  CloudSun,
+  AlertTriangle,
+  TrendingUp,
+  Lock,
+  Unlock,
+  Eye,
+  EyeOff,
+  MessageCircle,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { useTrips } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
@@ -43,6 +61,14 @@ import {
   DESTINATIONS_DB 
 } from '../../services/aiTripPlanner';
 import { exportTripToIcs, printTripRoadbook, openInGoogleCalendar } from '../../utils/calendarExport';
+import { calculateTripReadiness, getReadinessColor, type ReadinessScore } from '../../utils/tripReadiness';
+import { fetchTripWeatherMock, type TripWeatherData } from '../../services/tripWeather';
+import { encryptData, decryptData, maskSensitiveNumber, checkPasswordStrength } from '../../utils/encryption';
+import { collaborationService, type CollaborationUser } from '../../services/collaboration';
+import { TripReadinessWidget } from './TripReadinessWidget';
+import { TripWeatherWidget } from './TripWeatherWidget';
+import { SecureDocumentVault } from './SecureDocumentVault';
+import { CollaborationPanel } from './CollaborationPanel';
 
 export const getDestinationCover = (dest: string): string => {
   const d = (dest || '').toLowerCase();
@@ -98,6 +124,11 @@ export const TripsView: React.FC = () => {
   const [newDocCode, setNewDocCode] = useState('');
   const [newDocNotes, setNewDocNotes] = useState('');
   const [newDocFileUrl, setNewDocFileUrl] = useState('');
+
+  // Features Modal State (Score, Weather, Vault, Collaboration)
+  const [showFeaturesModal, setShowFeaturesModal] = useState(false);
+  const [selectedFeatureTrip, setSelectedFeatureTrip] = useState<Trip | null>(null);
+  const [activeFeatureTab, setActiveFeatureTab] = useState<'score' | 'weather' | 'vault' | 'collab'>('score');
 
   // Editing Trip
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
@@ -837,6 +868,21 @@ export const TripsView: React.FC = () => {
                     <Printer className="w-4 h-4" />
                   </button>
 
+                  {/* Fonctionnalités Avancées */}
+                  <button
+                    onClick={() => {
+                      setSelectedFeatureTrip(trip);
+                      setShowFeaturesModal(true);
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-colors group relative"
+                    title="Fonctionnalités avancées"
+                  >
+                    <Target className="w-4 h-4" />
+                    <span className="absolute -top-6 right-0 bg-brand-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                      NOUVEAU
+                    </span>
+                  </button>
+
                   {canManageTrips && (
                     <>
                       {/* Duplicate */}
@@ -1555,6 +1601,167 @@ export const TripsView: React.FC = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* ========== MODAL FONCTIONNALITÉS AVANCÉES ========== */}
+      <Modal
+        isOpen={showFeaturesModal}
+        onClose={() => {
+          setShowFeaturesModal(false);
+          setSelectedFeatureTrip(null);
+          setActiveFeatureTab('score'); // Reset to first tab
+        }}
+        title="Outils de Voyage"
+        subtitle={selectedFeatureTrip ? `${selectedFeatureTrip.title} • ${selectedFeatureTrip.destination}` : ''}
+      >
+        {selectedFeatureTrip && (
+          <div className="space-y-6 max-h-[75vh] overflow-y-auto pr-2 custom-scrollbar">
+            
+            {/* Onglets de navigation */}
+            <div className="flex items-center space-x-2 border-b border-slate-800 pb-3 sticky top-0 bg-slate-900 z-10">
+              <button 
+                onClick={() => setActiveFeatureTab('score')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                  activeFeatureTab === 'score' 
+                    ? 'bg-brand-600 text-white' 
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                🎯 Score
+              </button>
+              <button 
+                onClick={() => setActiveFeatureTab('weather')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                  activeFeatureTab === 'weather' 
+                    ? 'bg-brand-600 text-white' 
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                🌦️ Météo
+              </button>
+              <button 
+                onClick={() => setActiveFeatureTab('vault')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                  activeFeatureTab === 'vault' 
+                    ? 'bg-brand-600 text-white' 
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                🔐 Coffre
+              </button>
+              <button 
+                onClick={() => setActiveFeatureTab('collab')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                  activeFeatureTab === 'collab' 
+                    ? 'bg-brand-600 text-white' 
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                🤝 Collab
+              </button>
+            </div>
+
+            {/* ========== WIDGET 1: SCORE DE PRÉPARATION ========== */}
+            {activeFeatureTab === 'score' && (
+              <div className="space-y-2 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                    <span className="text-2xl">🎯</span>
+                    <span>Score de Préparation du Voyage</span>
+                  </h3>
+                  <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30 font-bold">
+                    NOUVEAU
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Évaluation intelligente de votre état de préparation avec suggestions personnalisées
+                </p>
+                <TripReadinessWidget trip={selectedFeatureTrip} />
+              </div>
+            )}
+
+            {/* ========== WIDGET 2: MÉTÉO INTELLIGENTE ========== */}
+            {activeFeatureTab === 'weather' && (
+              <div className="space-y-2 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                    <span className="text-2xl">🌦️</span>
+                    <span>Météo & Prévisions</span>
+                  </h3>
+                  <span className="text-xs bg-sky-500/20 text-sky-300 px-2 py-0.5 rounded-full border border-sky-500/30 font-bold">
+                    TEMPS RÉEL
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Conditions actuelles + prévisions 7 jours avec alertes automatiques
+                </p>
+                <TripWeatherWidget 
+                  trip={selectedFeatureTrip} 
+                  latitude={35.5} 
+                  longitude={10.8} 
+                />
+              </div>
+            )}
+
+            {/* ========== WIDGET 3: COFFRE-FORT SÉCURISÉ ========== */}
+            {activeFeatureTab === 'vault' && (
+              <div className="space-y-2 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                    <span className="text-2xl">🔐</span>
+                    <span>Coffre-Fort Documents Chiffrés</span>
+                  </h3>
+                  <span className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/30 font-bold flex items-center space-x-1">
+                    <span>🛡️</span>
+                    <span>AES-256</span>
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Protection militaire pour vos passeports, cartes bancaires et documents sensibles
+                </p>
+                <SecureDocumentVault 
+                  trip={selectedFeatureTrip} 
+                  onUpdateTrip={async (updates) => {
+                    await updateTrip(selectedFeatureTrip.id, updates);
+                    // Recharger le voyage pour refléter les changements
+                    const updatedTrip = trips.find(t => t.id === selectedFeatureTrip.id);
+                    if (updatedTrip) setSelectedFeatureTrip(updatedTrip);
+                  }}
+                />
+              </div>
+            )}
+
+            {/* ========== WIDGET 4: COLLABORATION TEMPS RÉEL ========== */}
+            {activeFeatureTab === 'collab' && currentUser && (
+              <div className="space-y-2 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                    <span className="text-2xl">🤝</span>
+                    <span>Collaboration Temps Réel</span>
+                  </h3>
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                    <span className="text-xs text-emerald-400 font-bold">LIVE</span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Chat intégré, participants en ligne et notifications d'activité en direct
+                </p>
+                <CollaborationPanel 
+                  trip={selectedFeatureTrip} 
+                  currentUser={{
+                    id: currentUser.id,
+                    name: currentUser.name,
+                    avatar: currentUser.avatar
+                  }}
+                  participants={selectedFeatureTrip.participants || []}
+                  allUsers={allUsers}
+                />
+              </div>
+            )}
+
+          </div>
+        )}
       </Modal>
     </div>
   );
