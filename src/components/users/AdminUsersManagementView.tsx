@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { UserRole } from '../../types';
 import { Modal } from '../common/Modal';
+import { AvatarPicker, AVATAR_PRESETS } from '../common/AvatarPicker';
 
 export const AdminUsersManagementView: React.FC = () => {
   const { currentUser, allUsers, isAdmin, updateUserRole, register } = useAuth();
@@ -28,6 +29,7 @@ export const AdminUsersManagementView: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('password123');
   const [selectedRole, setSelectedRole] = useState<UserRole>('Traveler');
+  const [avatar, setAvatar] = useState(AVATAR_PRESETS[0].url);
 
   // STRICT ACCESS CONTROL: IF NOT ADMIN, REJECT ACCESS!
   if (!isAdmin) {
@@ -63,12 +65,18 @@ export const AdminUsersManagementView: React.FC = () => {
     e.preventDefault();
     if (!name || !email) return;
 
-    const res = await register(name, email, password, {
-      currency: 'EUR',
-      travelPace: 'Balanced',
-      interests: ['Culture'],
-      theme: 'dark'
-    });
+    const res = await register(
+      name, 
+      email, 
+      password, 
+      {
+        currency: 'EUR',
+        travelPace: 'Balanced',
+        interests: ['Culture'],
+        theme: 'dark'
+      },
+      avatar
+    );
 
     if (res.success) {
       // If Admin selected another role, update it immediately
@@ -79,6 +87,7 @@ export const AdminUsersManagementView: React.FC = () => {
       setIsNewUserModalOpen(false);
       setName('');
       setEmail('');
+      setAvatar(AVATAR_PRESETS[0].url);
       setNotification({ text: `Utilisateur « ${name} » créé avec succès.` });
     } else {
       setNotification({ text: res.message || 'Erreur de création', error: true });
@@ -249,6 +258,13 @@ export const AdminUsersManagementView: React.FC = () => {
         subtitle="Enregistrez un nouveau compte directement avec son rôle"
       >
         <form onSubmit={handleCreateUser} className="space-y-4">
+          <AvatarPicker
+            value={avatar}
+            onChange={setAvatar}
+            label="Avatar de l'utilisateur"
+            compact
+          />
+
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">Prénom de l'utilisateur</label>
             <input

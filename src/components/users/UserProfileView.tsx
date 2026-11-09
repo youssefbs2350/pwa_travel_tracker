@@ -18,8 +18,11 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
+
+import { AvatarPicker, AVATAR_PRESETS } from '../common/AvatarPicker';
+
 export const UserProfileView: React.FC = () => {
-  const { currentUser, updatePreferences } = useAuth();
+  const { currentUser, updatePreferences, updateAvatar } = useAuth();
   const { theme, setTheme } = useTheme();
   const [copiedToken, setCopiedToken] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -88,7 +91,7 @@ export const UserProfileView: React.FC = () => {
           <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-5">
             <div className="flex items-center space-x-4">
               <img
-                src={currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
+                src={currentUser?.avatar || AVATAR_PRESETS[0].url}
                 alt={currentUser?.name}
                 className="w-16 h-16 rounded-2xl object-cover border-2 border-brand-500 shadow-md"
               />
@@ -103,6 +106,21 @@ export const UserProfileView: React.FC = () => {
                   <span>Rôle : {currentUser?.role}</span>
                 </div>
               </div>
+            </div>
+
+            {/* Quick Avatar Change */}
+            <div className="pt-2 border-t border-slate-800">
+              <AvatarPicker
+                value={currentUser?.avatar || AVATAR_PRESETS[0].url}
+                onChange={async (newAvatar) => {
+                  if (updateAvatar) {
+                    await updateAvatar(newAvatar);
+                    setSaveSuccess(true);
+                    setTimeout(() => setSaveSuccess(false), 2500);
+                  }
+                }}
+                label="Modifier ma photo / avatar"
+              />
             </div>
 
             {/* Role Notice */}

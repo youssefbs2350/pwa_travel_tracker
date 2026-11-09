@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { User, UserRole } from '../../types';
 import { Modal } from '../common/Modal';
+import { AvatarPicker, AVATAR_PRESETS } from '../common/AvatarPicker';
 
 export const UsersView: React.FC = () => {
   const { currentUser, allUsers, isAdmin, updateUserRole, updatePreferences, register } = useAuth();
@@ -30,6 +31,7 @@ export const UsersView: React.FC = () => {
   const [role, setRole] = useState<UserRole>('Traveler');
   const [currency, setCurrency] = useState('EUR');
   const [pace, setPace] = useState<'Relaxed' | 'Balanced' | 'Intense'>('Balanced');
+  const [avatar, setAvatar] = useState(AVATAR_PRESETS[0].url);
 
   const handleCopyToken = () => {
     if (currentUser?.token) {
@@ -59,16 +61,23 @@ export const UsersView: React.FC = () => {
     e.preventDefault();
     if (!name || !email) return;
 
-    const res = await register(name, email, role, {
-      currency,
-      travelPace: pace,
-      interests: ['Culture', 'Gastronomie'],
-      theme: 'dark'
-    });
+    const res = await register(
+      name, 
+      email, 
+      'password123', 
+      {
+        currency,
+        travelPace: pace,
+        interests: ['Culture', 'Gastronomie'],
+        theme: 'dark'
+      },
+      avatar
+    );
 
     if (res.success) {
       setName('');
       setEmail('');
+      setAvatar(AVATAR_PRESETS[0].url);
       setIsNewUserModalOpen(false);
       setActionMessage({ text: 'Nouvel utilisateur créé avec succès.' });
       setTimeout(() => setActionMessage(null), 4000);
@@ -363,6 +372,13 @@ export const UsersView: React.FC = () => {
         subtitle="Enregistrez un nouveau compte avec son rôle"
       >
         <form onSubmit={handleCreateUser} className="space-y-4">
+          <AvatarPicker
+            value={avatar}
+            onChange={setAvatar}
+            label="Avatar du voyageur"
+            compact
+          />
+
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">Nom complet</label>
             <input

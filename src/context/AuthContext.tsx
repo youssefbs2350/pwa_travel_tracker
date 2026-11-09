@@ -9,7 +9,8 @@ interface AuthContextType {
   isLoading: boolean;
   isAdmin: boolean;
   login: (email: string, password?: string) => Promise<{ success: boolean; message?: string }>;
-  register: (name: string, email: string, password: string, preferences?: any) => Promise<{ success: boolean; message?: string }>;
+  register: (name: string, email: string, password: string, preferences?: any, avatar?: string) => Promise<{ success: boolean; message?: string }>;
+  updateAvatar: (avatar: string) => Promise<{ success: boolean; message?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; code?: string; sent?: boolean; message?: string }>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
@@ -146,12 +147,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (name: string, email: string, password: string, preferences?: any): Promise<{ success: boolean; message?: string }> => {
+  const register = async (name: string, email: string, password: string, preferences?: any, avatar?: string): Promise<{ success: boolean; message?: string }> => {
+    const chosenAvatar = avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150';
     try {
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role: 'Traveler', preferences })
+        body: JSON.stringify({ name, email, password, role: 'Traveler', preferences, avatar: chosenAvatar })
       });
 
       if (res.ok) {
@@ -177,7 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name,
         email,
         role: 'Traveler',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+        avatar: chosenAvatar,
         token: 'jwt-offline-' + Date.now(),
         preferences: preferences || { currency: 'EUR', travelPace: 'Balanced', interests: ['Culture'], theme: 'dark' },
         createdAt: new Date().toISOString()
@@ -298,6 +300,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAllUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
   };
 
+  const updateAvatar = async (newAvatar: string): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser) return { success: false, message: 'Vous devez être connecté.' };
+    try {
+      await fetch(`/api/users/${currentUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: newAvatar })
+      });
+    } catch {
+      // offline
+    }
+    await db.users.update(currentUser.id, { avatar: newAvatar });
+    const updatedUser = { ...currentUser, avatar: newAvatar };
+    setCurrentUser(updatedUser);
+    setAllUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
+    return { success: true };
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -312,7 +332,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetPassword,
         logout,
         updateUserRole,
-        updatePreferences
+        updatePreferences,
+        updateAvatar
       }}
     >
       {children}

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { AvatarPicker, AVATAR_PRESETS } from '../common/AvatarPicker';
 
 type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
 
@@ -78,6 +79,7 @@ export const AuthScreen: React.FC = () => {
   // Register preferences
   const [currency, setCurrency] = useState('EUR');
   const [travelPace, setTravelPace] = useState<'Relaxed' | 'Balanced' | 'Intense'>('Balanced');
+  const [avatar, setAvatar] = useState(AVATAR_PRESETS[0].url);
 
   // Forgot password states
   const [resetStep, setResetStep] = useState<1 | 2>(1);
@@ -142,12 +144,18 @@ export const AuthScreen: React.FC = () => {
       return;
     }
 
-    const res = await register(name, email, password, {
-      currency,
-      travelPace,
-      interests: ['Culture', 'Gastronomie'],
-      theme: 'dark'
-    });
+    const res = await register(
+      name, 
+      email, 
+      password, 
+      {
+        currency,
+        travelPace,
+        interests: ['Culture', 'Gastronomie'],
+        theme: 'dark'
+      },
+      avatar
+    );
 
     if (!res.success) {
       setErrorMsg(res.message || 'Erreur lors de l\'inscription.');
@@ -528,6 +536,12 @@ export const AuthScreen: React.FC = () => {
               {/* 2. REGISTER MODE */}
               {mode === 'REGISTER' && (
                 <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+                  <AvatarPicker
+                    value={avatar}
+                    onChange={setAvatar}
+                    label="Avatar du voyageur (personnalisable)"
+                  />
+
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">Prénom / Nom</label>
                     <div className="relative">
