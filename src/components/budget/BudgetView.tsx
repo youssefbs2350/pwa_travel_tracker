@@ -7,12 +7,12 @@ import {
   PieChart, 
   Users, 
   Trash2, 
-  Receipt,
-  ArrowRight,
+  Receipt, 
   ShieldAlert,
   Sparkles,
   Edit3,
-  UserCheck
+  UserCheck,
+  Check
 } from 'lucide-react';
 
 import { useTrips } from '../../context/TripContext';
@@ -82,7 +82,6 @@ export const BudgetView: React.FC = () => {
 
   const [budgetInput, setBudgetInput] = useState<number>(personalBudget);
 
-  // Synchronisation du budget personnel lors du changement d'utilisateur ou de destination
   useEffect(() => {
     const saved = localStorage.getItem(budgetStorageKey);
     if (saved !== null && !isNaN(Number(saved)) && Number(saved) > 0) {
@@ -105,14 +104,29 @@ export const BudgetView: React.FC = () => {
   };
 
   // ---------------------------------------------------------
-  // 2. Participants ayant choisi la même destination
+  // 2. Participants éligibles ayant choisi la même destination
   // ---------------------------------------------------------
+  const [platformUsers, setPlatformUsers] = useState<string[]>(['Ameni', 'Chaima', 'Youssef']);
+
+  useEffect(() => {
+    db.users.toArray().then(users => {
+      if (users && users.length > 0) {
+        setPlatformUsers(users.map(u => u.name));
+      }
+    }).catch(() => {});
+  }, []);
+
   const sameDestinationParticipants = useMemo(() => {
     if (!activeTrip) return [];
     const activeDest = normalize(activeTrip.destination);
     const set = new Set<string>();
 
-    // 1. Tous les participants de voyages ayant la même destination
+    // Participants du voyage actif
+    (activeTrip.participants || []).forEach(p => {
+      if (p && p.trim()) set.add(p.trim());
+    });
+
+    // Participants des voyages ayant la même destination
     trips.forEach(t => {
       const tDest = normalize(t.destination);
       if (tDest === activeDest || (tDest && activeDest && (tDest.includes(activeDest) || activeDest.includes(tDest)))) {
@@ -122,25 +136,41 @@ export const BudgetView: React.FC = () => {
       }
     });
 
-    // 2. Participants du voyage actif
-    (activeTrip.participants || []).forEach(p => {
-      if (p && p.trim()) set.add(p.trim());
+    // Membres de la plateforme ayant choisi cette destination
+    platformUsers.forEach(uName => {
+      const hasTrip = trips.some(t => {
+        const tDest = normalize(t.destination);
+        const matches = tDest === activeDest || (tDest && activeDest && (tDest.includes(activeDest) || activeDest.includes(tDest)));
+        return matches && (t.participants || []).some(p => normalize(p) === normalize(uName));
+      });
+      if (hasTrip) {
+        set.add(uName);
+      }
     });
 
-    // 3. Inclure l'utilisateur actuel
+    // Si aucun participant tiers n'est encore lié explicitement à cette destination,
+    // proposer les autres voyageurs enregistrés (ex: Ameni) pour permettre le split à destination
+    if (set.size <= 1) {
+      platformUsers.forEach(uName => {
+        if (normalize(uName) !== normalize(currentUserName)) {
+          set.add(uName);
+        }
+      });
+    }
+
     if (currentUserName) {
       set.add(currentUserName);
     }
 
     return Array.from(set);
-  }, [activeTrip, trips, currentUserName]);
+  }, [activeTrip, trips, platformUsers, currentUserName]);
 
-  // Autres participants de la même destination avec lesquels l'utilisateur peut partager
+  // Autres participants de la même destination sélectionnables pour le split
   const eligibleSplitPartners = useMemo(() => {
     return sameDestinationParticipants.filter(p => normalize(p) !== normalize(currentUserName) && normalize(p) !== 'moi');
   }, [sameDestinationParticipants, currentUserName]);
 
-  // Form states pour l'ajout de dépense
+  // Form states pour l'ajout de dépense (SANS CHAMP "Payé par")
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('Nourriture');
   const [amount, setAmount] = useState<number>(100);
@@ -148,6 +178,7 @@ export const BudgetView: React.FC = () => {
   const [date, setDate] = useState('');
   const [selectedSplitPartners, setSelectedSplitPartners] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
+  const [customPartnerInput, setCustomPartnerInput] = useState('');
 
   const loadExpenses = async () => {
     if (!activeTrip) return;
@@ -165,13 +196,13 @@ export const BudgetView: React.FC = () => {
   const categories: ExpenseCategory[] = ['Hébergement', 'Transport', 'Nourriture', 'Activités', 'Shopping', 'Santé', 'Autre'];
 
   // ---------------------------------------------------------
-  // Calcul de la part individuelle d'un utilisateur pour une dépense
+  // Calcul de la part individuelle pour un participant
   // ---------------------------------------------------------
   const getUserShare = (exp: Expense, userName: string): number => {
     if (!userName) return exp.amount;
     const uNorm = normalize(userName);
 
-    // 1. Si les détails exacts ont été enregistrés
+    // 1. Détails exacts enregistrés
     if (exp.splitDetails && Object.keys(exp.splitDetails).length > 0) {
       const directKey = Object.keys(exp.splitDetails).find(k => {
         const kNorm = normalize(k);
@@ -179,12 +210,11 @@ export const BudgetView: React.FC = () => {
       });
       if (directKey) return exp.splitDetails[directKey];
 
-      // Vérifier si l'utilisateur est listé dans splitWith
       const inSplit = (exp.splitWith || []).some(p => normalize(p) === uNorm || (normalize(p) === 'moi' && normalize(exp.paidBy) === uNorm));
       if (!inSplit) return 0;
     }
 
-    // 2. Détermination des bénéficiaires
+    // 2. Détermination dynamique des bénéficiaires
     const beneficiaries = (exp.splitWith && exp.splitWith.length > 0)
       ? exp.splitWith
       : [exp.paidBy || userName];
@@ -207,10 +237,7 @@ export const BudgetView: React.FC = () => {
     return shareKey ? shares[shareKey] : (exp.amount / (beneficiaries.length || 1));
   };
 
-  // ---------------------------------------------------------
-  // Conversion et calculs respectant la part de chaque participant
-  // (Pas de double comptabilisation, budget personnel préservé)
-  // ---------------------------------------------------------
+  // Calcul des montants convertis et des parts
   const convertedExpenses = expenses.map(e => {
     const userShare = getUserShare(e, currentUserName);
     const expenseCurr = e.currency || tripCurrency;
@@ -222,13 +249,13 @@ export const BudgetView: React.FC = () => {
     };
   });
 
-  // Total dépensé par l'utilisateur connecté (somme stricte de ses parts)
+  // KPI Dépenses personnelles
   const totalSpent = Math.round(convertedExpenses.reduce((sum, e) => sum + e.convertedUserShare, 0) * 100) / 100;
   const budgetTotal = Math.round(convert(personalBudget, tripCurrency) * 100) / 100;
   const remainingBudget = Math.round((budgetTotal - totalSpent) * 100) / 100;
   const percentSpent = Math.min(100, Math.round((totalSpent / (budgetTotal || 1)) * 100));
 
-  // Répartition par catégorie basée sur la part réelle de l'utilisateur
+  // Répartition par catégorie
   const categoryTotals = categories.map(cat => {
     const total = Math.round(
       convertedExpenses.filter(e => e.category === cat).reduce((s, e) => s + e.convertedUserShare, 0) * 100
@@ -237,73 +264,15 @@ export const BudgetView: React.FC = () => {
     return { category: cat, total, pct };
   }).filter(c => c.total > 0);
 
-  // Estimation du budget final IA pour l'utilisateur
+  // Estimation du budget final IA
   const tripDurationDays = activeTrip
     ? Math.max(1, Math.ceil((new Date(activeTrip.endDate).getTime() - new Date(activeTrip.startDate).getTime()) / (1000 * 60 * 60 * 24)))
     : 7;
   const dailyAverage = totalSpent / (expenses.length > 0 ? Math.min(tripDurationDays, Math.max(1, expenses.length)) : 1);
   const projectedTotal = Math.round(dailyAverage * tripDurationDays);
 
-  // Équilibrage des dettes entre compagnons (Split)
-  const calculateSettlement = () => {
-    const participants = sameDestinationParticipants.length > 0 
-      ? sameDestinationParticipants 
-      : (activeTrip?.participants || [currentUserName]);
-
-    const balances: Record<string, number> = {};
-    participants.forEach(p => balances[p] = 0);
-
-    convertedExpenses.forEach(e => {
-      const payer = e.paidBy || currentUserName;
-      const beneficiaries = (e.splitWith && e.splitWith.length > 0) ? e.splitWith : [payer];
-      const shares = calculateSplitShares(e.convertedAmount, beneficiaries);
-
-      balances[payer] = (balances[payer] || 0) + e.convertedAmount;
-      beneficiaries.forEach(b => {
-        const share = shares[b] !== undefined ? shares[b] : (e.convertedAmount / (beneficiaries.length || 1));
-        balances[b] = (balances[b] || 0) - share;
-      });
-    });
-
-    const creditors: { name: string; amount: number }[] = [];
-    const debtors: { name: string; amount: number }[] = [];
-
-    Object.entries(balances).forEach(([name, bal]) => {
-      if (bal > 0.01) creditors.push({ name, amount: bal });
-      else if (bal < -0.01) debtors.push({ name, amount: -bal });
-    });
-
-    const settlements: { from: string; to: string; amount: number }[] = [];
-    let cIdx = 0;
-    let dIdx = 0;
-
-    while (cIdx < creditors.length && dIdx < debtors.length) {
-      const creditor = creditors[cIdx];
-      const debtor = debtors[dIdx];
-      const settleAmount = Math.min(creditor.amount, debtor.amount);
-
-      if (settleAmount > 0.5) {
-        settlements.push({
-          from: debtor.name,
-          to: creditor.name,
-          amount: Math.round(settleAmount * 100) / 100
-        });
-      }
-
-      creditor.amount -= settleAmount;
-      debtor.amount -= settleAmount;
-
-      if (creditor.amount < 0.01) cIdx++;
-      if (debtor.amount < 0.01) dIdx++;
-    }
-
-    return settlements;
-  };
-
-  const settlements = calculateSettlement();
-
   // ---------------------------------------------------------
-  // Calcul en direct pour le formulaire d'ajout (Modal)
+  // Calcul en direct pour le formulaire d'ajout
   // ---------------------------------------------------------
   const liveSplitBeneficiaries = useMemo(() => {
     if (selectedSplitPartners.length === 0) {
@@ -320,6 +289,19 @@ export const BudgetView: React.FC = () => {
     setSelectedSplitPartners(prev =>
       prev.includes(partner) ? prev.filter(p => p !== partner) : [...prev, partner]
     );
+  };
+
+  const handleAddCustomPartner = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = customPartnerInput.trim();
+    if (!clean) return;
+    if (!eligibleSplitPartners.some(p => normalize(p) === normalize(clean))) {
+      setPlatformUsers(prev => [...prev, clean]);
+    }
+    if (!selectedSplitPartners.includes(clean)) {
+      setSelectedSplitPartners(prev => [...prev, clean]);
+    }
+    setCustomPartnerInput('');
   };
 
   const handleCreateExpense = async (e: React.FormEvent) => {
@@ -398,6 +380,9 @@ export const BudgetView: React.FC = () => {
     }
   };
 
+  // Liste des dépenses partagées pour l'affichage récapitulatif
+  const sharedExpensesList = convertedExpenses.filter(e => e.splitWith && e.splitWith.length > 1);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -410,11 +395,11 @@ export const BudgetView: React.FC = () => {
             <div className="flex items-center space-x-2">
               <h2 className="text-xl font-bold text-white">Gestion du Budget</h2>
               <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700">
-                {activeTrip?.destination || 'Destination'}
+                Destination : {activeTrip?.destination || 'Destination'}
               </span>
             </div>
             <p className="text-sm text-slate-400 mt-0.5">
-              Budget personnel indépendant, suivi individuel et partage automatique des frais (split).
+              Budget personnel indépendant, suivi individuel et calcul automatique du partage des frais (split).
             </p>
           </div>
         </div>
@@ -521,75 +506,92 @@ export const BudgetView: React.FC = () => {
         </div>
       </div>
 
-      {/* Graphiques et Équilibrage */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Répartition par Catégorie */}
-        <div className="lg:col-span-2 p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-          <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-            <PieChart className="w-4 h-4 text-emerald-400" />
-            <span>Répartition de Mes Dépenses par Catégorie</span>
-          </h3>
+      {/* Répartition par Catégorie (Plein format après suppression de la section équilibrage) */}
+      <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+        <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+          <PieChart className="w-4 h-4 text-emerald-400" />
+          <span>Répartition de Mes Dépenses par Catégorie</span>
+        </h3>
 
-          {categoryTotals.length === 0 ? (
-            <p className="text-xs text-slate-500 py-4 text-center">Aucune dépense enregistrée pour le moment.</p>
-          ) : (
-            <div className="space-y-3">
-              {categoryTotals.map(item => (
-                <div key={item.category} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-300 font-medium">{item.category}</span>
-                    <span className="text-slate-400 font-semibold">
-                      {format(item.total, userCurrency)} ({item.pct}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${item.pct}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Équilibrage des Comptes (Split) */}
-        <div className="lg:col-span-1 p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-          <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-            <Users className="w-4 h-4 text-sky-400" />
-            <span>Équilibrage des Comptes (Split)</span>
-          </h3>
-
-          <p className="text-xs text-slate-400 leading-relaxed">
-            Remboursements optimisés entre participants pour la destination <strong className="text-white">{activeTrip?.destination}</strong> :
-          </p>
-
-          <div className="space-y-2">
-            {settlements.length === 0 ? (
-              <div className="p-3 rounded-xl bg-slate-800/40 text-center text-xs text-slate-400">
-                ✨ Comptes parfaitement équilibrés entre tous les membres !
-              </div>
-            ) : (
-              settlements.map((s, idx) => (
-                <div key={idx} className="p-3 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-2 truncate">
-                    <span className="font-semibold text-rose-300 truncate">{s.from}</span>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                    <span className="font-semibold text-emerald-300 truncate">{s.to}</span>
-                  </div>
-                  <span className="font-bold text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-700 flex-shrink-0 ml-2">
-                    {format(s.amount, userCurrency)}
+        {categoryTotals.length === 0 ? (
+          <p className="text-xs text-slate-500 py-4 text-center">Aucune dépense enregistrée pour le moment.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {categoryTotals.map(item => (
+              <div key={item.category} className="space-y-1 bg-slate-850/60 p-3 rounded-xl border border-slate-800">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 font-medium">{item.category}</span>
+                  <span className="text-slate-400 font-semibold">
+                    {format(item.total, userCurrency)} ({item.pct}%)
                   </span>
                 </div>
-              ))
-            )}
+                <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${item.pct}%` }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
       </div>
 
+      {/* Encart visuel dédié : Calcul et Récapitulatif du Split entre participants */}
+      {sharedExpensesList.length > 0 && (
+        <div className="p-5 rounded-2xl bg-slate-900 border border-emerald-500/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+              <Users className="w-4 h-4 text-emerald-400" />
+              <span>Détail du Calcul de Split Partagé entre Participants ({sharedExpensesList.length})</span>
+            </h3>
+            <span className="text-xs text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+              Même destination : {activeTrip?.destination}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {sharedExpensesList.map(exp => {
+              const beneficiaries = exp.splitWith || [];
+              const shares = exp.splitDetails && Object.keys(exp.splitDetails).length > 0
+                ? exp.splitDetails
+                : calculateSplitShares(exp.amount, beneficiaries);
+
+              return (
+                <div key={exp.id} className="p-3.5 rounded-xl bg-slate-850 border border-slate-750 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white text-xs truncate" title={exp.title}>{exp.title}</span>
+                    <span className="text-xs font-bold text-emerald-400 ml-2 whitespace-nowrap">
+                      Total : {exp.amount} {exp.currency || tripCurrency}
+                    </span>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-slate-750/70 space-y-1 text-xs">
+                    {beneficiaries.map(partner => {
+                      const shareVal = shares[partner] !== undefined ? shares[partner] : getUserShare(exp, partner);
+                      const isMe = normalize(partner) === normalize(currentUserName) || normalize(partner) === 'moi';
+
+                      return (
+                        <div key={partner} className="flex justify-between items-center">
+                          <span className={isMe ? 'font-bold text-emerald-300' : 'text-slate-300'}>
+                            {isMe ? `Ma part (${currentUserName})` : `Part de ${partner}`} :
+                          </span>
+                          <span className={`font-mono font-bold ${isMe ? 'text-emerald-400' : 'text-slate-200'}`}>
+                            {shareVal.toFixed(2)} {exp.currency || tripCurrency}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Tableau récapitulatif détaillé des dépenses */}
-      {/* Colonne "Payé par qui" SUPPRIMÉE conformément à l'exigence */}
+      {/* SANS AUCUNE COLONNE "Payé par" conformément à votre demande */}
       <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-white flex items-center space-x-2">
@@ -608,7 +610,7 @@ export const BudgetView: React.FC = () => {
                 <th className="py-2.5 px-3">Date</th>
                 <th className="py-2.5 px-3">Libellé</th>
                 <th className="py-2.5 px-3">Catégorie</th>
-                <th className="py-2.5 px-3">Partage</th>
+                <th className="py-2.5 px-3">Calcul du Partage (Split)</th>
                 <th className="py-2.5 px-3 text-right">Ma part</th>
                 <th className="py-2.5 px-3 text-right">Montant total</th>
                 <th className="py-2.5 px-3 text-center">Action</th>
@@ -625,6 +627,10 @@ export const BudgetView: React.FC = () => {
                 convertedExpenses.map(exp => {
                   const isShared = exp.splitWith && exp.splitWith.length > 1;
                   const isCurrentUserBeneficiary = exp.userShare > 0;
+                  const beneficiaries = exp.splitWith || [];
+                  const shares = exp.splitDetails && Object.keys(exp.splitDetails).length > 0
+                    ? exp.splitDetails
+                    : calculateSplitShares(exp.amount, beneficiaries);
 
                   return (
                     <tr key={exp.id} className="hover:bg-slate-800/40 transition-colors">
@@ -635,28 +641,47 @@ export const BudgetView: React.FC = () => {
                           {exp.category}
                         </span>
                       </td>
+
+                      {/* Colonne Calcul du Partage bien visible avec montants exacts de chaque participant */}
                       <td className="py-2.5 px-3">
                         {isShared ? (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="inline-flex items-center space-x-1 text-[11px] font-medium text-emerald-400">
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-400">
                               <Users className="w-3 h-3" />
-                              <span>Partagé ({exp.splitWith.length})</span>
+                              <span>Partagé ({beneficiaries.length} pers.) :</span>
                             </span>
-                            <span className="text-[10px] text-slate-400 truncate max-w-[180px]" title={exp.splitWith.join(', ')}>
-                              {exp.splitWith.join(', ')}
-                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {beneficiaries.map(partner => {
+                                const shareVal = shares[partner] !== undefined ? shares[partner] : getUserShare(exp, partner);
+                                const isMe = normalize(partner) === normalize(currentUserName) || normalize(partner) === 'moi';
+
+                                return (
+                                  <span
+                                    key={partner}
+                                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
+                                      isMe 
+                                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold' 
+                                        : 'bg-slate-800 text-slate-300 border-slate-700'
+                                    }`}
+                                  >
+                                    {isMe ? 'Moi' : partner} : {shareVal.toFixed(2)} {exp.currency || tripCurrency}
+                                  </span>
+                                );
+                              })}
+                            </div>
                           </div>
                         ) : (
                           <span className="inline-flex items-center space-x-1 text-[11px] text-slate-400">
                             <UserCheck className="w-3 h-3 text-slate-500" />
-                            <span>Individuel</span>
+                            <span>Individuel (100% à ma charge)</span>
                           </span>
                         )}
                       </td>
+
                       <td className="py-2.5 px-3 text-right whitespace-nowrap font-bold">
                         {isCurrentUserBeneficiary ? (
                           <div>
-                            <span className="text-emerald-400 font-extrabold">
+                            <span className="text-emerald-400 font-extrabold text-sm">
                               {format(exp.convertedUserShare, userCurrency)}
                             </span>
                             {(exp.currency || tripCurrency) !== userCurrency && (
@@ -669,6 +694,7 @@ export const BudgetView: React.FC = () => {
                           <span className="text-slate-500 italic text-[11px]">Non concerné(e)</span>
                         )}
                       </td>
+
                       <td className="py-2.5 px-3 text-right whitespace-nowrap font-semibold text-slate-300">
                         <div>{format(exp.convertedAmount, userCurrency)}</div>
                         {(exp.currency || tripCurrency) !== userCurrency && (
@@ -677,6 +703,7 @@ export const BudgetView: React.FC = () => {
                           </div>
                         )}
                       </td>
+
                       <td className="py-2.5 px-3 text-center">
                         {(canManageAllExpenses || normalize(exp.paidBy) === normalize(currentUserName) || normalize(exp.paidBy) === 'moi') ? (
                           <button
@@ -750,7 +777,7 @@ export const BudgetView: React.FC = () => {
         </form>
       </Modal>
 
-      {/* Modal 2 : Ajouter une Dépense avec Partage (Split Expenses) */}
+      {/* Modal 2 : Ajouter une Dépense (SANS LE CHAMP "Payé par") */}
       <Modal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
@@ -826,89 +853,102 @@ export const BudgetView: React.FC = () => {
           <div className="pt-2 border-t border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-semibold text-slate-200">
-                Partager cette dépense avec d'autres participants :
+                Partager cette facture avec d'autres participants :
               </label>
               <span className="text-[11px] text-emerald-400 font-medium">
-                Même destination ({activeTrip?.destination})
+                Destination : {activeTrip?.destination}
               </span>
             </div>
 
-            {eligibleSplitPartners.length === 0 ? (
-              <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-750 text-slate-400 text-xs">
-                ℹ️ Aucun autre participant n'est actuellement inscrit pour la destination <strong>{activeTrip?.destination}</strong>. Cette dépense reste entièrement individuelle (100% à votre charge).
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {eligibleSplitPartners.map(partner => {
+                  const isSelected = selectedSplitPartners.includes(partner);
+                  return (
+                    <button
+                      type="button"
+                      key={partner}
+                      onClick={() => toggleSplitPartner(partner)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all flex items-center space-x-1.5 ${
+                        isSelected
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-sm shadow-emerald-500/20 font-bold'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>{partner}</span>
+                      {isSelected ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <span className="font-bold">+</span>}
+                    </button>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-2">
-                  {eligibleSplitPartners.map(partner => {
-                    const isSelected = selectedSplitPartners.includes(partner);
-                    return (
-                      <button
-                        type="button"
-                        key={partner}
-                        onClick={() => toggleSplitPartner(partner)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all flex items-center space-x-1.5 ${
-                          isSelected
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-sm shadow-emerald-500/20'
-                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600 hover:text-slate-200'
-                        }`}
-                      >
-                        <span>{partner}</span>
-                        <span className="font-bold">{isSelected ? '✓' : '+'}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  {selectedSplitPartners.length === 0
-                    ? 'Aucun participant sélectionné : la dépense reste entièrement individuelle.'
-                    : `Sélectionné(s) : ${selectedSplitPartners.join(', ')}`}
-                </p>
-              </div>
-            )}
 
-            {/* Récapitulatif du calcul automatique de répartition */}
-            <div className="p-3.5 rounded-xl bg-slate-800/70 border border-slate-700 space-y-2 text-xs">
-              <div className="flex items-center justify-between text-slate-300 font-semibold border-b border-slate-700 pb-2">
+              {/* Champ d'ajout rapide d'un compagnon pour cette destination si besoin */}
+              <div className="flex items-center space-x-2 pt-1">
+                <input
+                  type="text"
+                  value={customPartnerInput}
+                  onChange={e => setCustomPartnerInput(e.target.value)}
+                  placeholder="Ajouter un autre voyageur (ex: Ameni)..."
+                  className="bg-slate-800/80 border border-slate-750 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustomPartner}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700"
+                >
+                  Ajouter
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-400">
+                {selectedSplitPartners.length === 0
+                  ? '💡 Aucun participant sélectionné : la facture reste 100% à votre charge.'
+                  : `Compagnons sélectionnés : ${selectedSplitPartners.join(', ')}`}
+              </p>
+            </div>
+
+            {/* Récapitulatif du calcul automatique de répartition bien visible */}
+            <div className="p-3.5 rounded-xl bg-slate-850 border border-emerald-500/40 space-y-2 text-xs">
+              <div className="flex items-center justify-between text-slate-200 font-bold border-b border-slate-750 pb-2">
                 <span className="flex items-center space-x-1.5">
-                  <Users className="w-3.5 h-3.5 text-emerald-400" />
+                  <Users className="w-4 h-4 text-emerald-400" />
                   <span>
                     {selectedSplitPartners.length === 0
                       ? 'Dépense individuelle (1 participant)'
-                      : `Répartition automatique (${liveSplitBeneficiaries.length} participants)`}
+                      : `Calcul du Split (${liveSplitBeneficiaries.length} participants) :`}
                   </span>
                 </span>
-                <span className="text-emerald-400 font-bold">
-                  Montant total : {amount || 0} {expenseCurrency}
+                <span className="text-emerald-400 font-extrabold text-sm">
+                  Total : {amount || 0} {expenseCurrency}
                 </span>
               </div>
 
               {selectedSplitPartners.length === 0 ? (
-                <div className="text-slate-300 text-xs">
+                <div className="text-slate-300 text-xs py-1">
                   <span>Ma part ({currentUserName}) : </span>
-                  <strong className="text-emerald-400">{amount || 0} {expenseCurrency}</strong>
-                  <span className="text-slate-500 text-[11px] block mt-0.5">
-                    (Le budget personnel reste inchangé, aucune part n'est imputée aux autres participants)
-                  </span>
+                  <strong className="text-emerald-400 font-bold">{amount || 0} {expenseCurrency}</strong>
+                  <p className="text-slate-500 text-[11px] mt-0.5">
+                    Le montant total est imputé uniquement sur votre budget personnel.
+                  </p>
                 </div>
               ) : (
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex justify-between items-center text-slate-200">
-                    <span className="font-medium">Ma part ({currentUserName}) :</span>
-                    <strong className="text-emerald-400">
+                <div className="space-y-2 pt-1">
+                  <div className="flex justify-between items-center text-slate-100 bg-emerald-500/10 px-2.5 py-1.5 rounded-lg border border-emerald-500/20">
+                    <span className="font-bold text-emerald-300">Ma part ({currentUserName}) :</span>
+                    <strong className="text-emerald-400 font-extrabold text-sm">
                       {liveShares[currentUserName]?.toFixed(2)} {expenseCurrency}
                     </strong>
                   </div>
                   {selectedSplitPartners.map(partner => (
-                    <div key={partner} className="flex justify-between items-center text-slate-300">
-                      <span>Part de {partner} :</span>
-                      <span className="font-semibold text-slate-200">
+                    <div key={partner} className="flex justify-between items-center text-slate-300 px-2.5 py-1 bg-slate-800/60 rounded-lg">
+                      <span className="font-medium">Part de {partner} :</span>
+                      <span className="font-semibold text-slate-100">
                         {liveShares[partner]?.toFixed(2)} {expenseCurrency}
                       </span>
                     </div>
                   ))}
-                  <div className="text-[11px] text-slate-400 pt-1.5 border-t border-slate-700/60 flex justify-between">
-                    <span>Somme exacte des parts :</span>
+                  <div className="text-[11px] text-slate-400 pt-1.5 border-t border-slate-750 flex justify-between">
+                    <span>Somme exacte vérifiée :</span>
                     <span className="font-mono font-bold text-slate-300">
                       {Object.values(liveShares).reduce((s, v) => s + v, 0).toFixed(2)} {expenseCurrency}
                     </span>
