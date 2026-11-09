@@ -12,6 +12,70 @@ function toIcsDateTime(dateStr: string, timeStr: string = '09:00'): string {
 }
 
 /**
+ * Format a date and time for Google Calendar URL (YYYYMMDDTHHMMSS format)
+ */
+function toGoogleCalendarDateTime(dateStr: string, timeStr: string = '09:00'): string {
+  return toIcsDateTime(dateStr, timeStr);
+}
+
+/**
+ * Open Google Calendar in a new tab with a pre-filled event for the trip
+ * Creates a single event with the trip's start and end dates
+ */
+export function openInGoogleCalendar(trip: Trip, activities: Activity[]) {
+  // Use the first activity's date or trip start date
+  const startDate = activities[0]?.date || trip.startDate;
+  const startTime = activities[0]?.startTime || '09:00';
+  
+  // Use the last activity or trip end date
+  const lastActivity = activities[activities.length - 1];
+  const endDate = lastActivity?.date || trip.endDate;
+  const endTime = lastActivity?.endTime || '18:00';
+  
+  const startDateTime = toGoogleCalendarDateTime(startDate, startTime);
+  const endDateTime = toGoogleCalendarDateTime(endDate, endTime);
+  
+  // Build description with activity list
+  let description = `Voyage organisé avec Travel Tracker PWA\\n\\n`;
+  description += `🌍 Destination: ${trip.destination}, ${trip.country}\\n`;
+  description += `👥 Participants: ${trip.participants.join(', ')}\\n`;
+  description += `💰 Budget: ${trip.budgetTotal} ${trip.currency}\\n\\n`;
+  
+  if (activities.length > 0) {
+    description += `📅 Programme (${activities.length} activités):\\n\\n`;
+    activities.slice(0, 10).forEach((act, idx) => {
+      description += `• Jour ${act.dayNumber} - ${act.title}`;
+      if (act.startTime) {
+        description += ` (${act.startTime})`;
+      }
+      description += `\\n`;
+    });
+    if (activities.length > 10) {
+      description += `\\n... et ${activities.length - 10} autres activités`;
+    }
+  }
+  
+  if (trip.notes) {
+    description += `\\n\\n💡 Notes:\\n${trip.notes.substring(0, 200)}`;
+  }
+  
+  // Google Calendar URL parameters
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: trip.title,
+    dates: `${startDateTime}/${endDateTime}`,
+    details: description,
+    location: `${trip.destination}, ${trip.country}`,
+    trp: 'false' // Don't show "Busy" by default
+  });
+  
+  const googleCalendarUrl = `https://calendar.google.com/calendar/render?${params.toString()}`;
+  
+  // Open in new tab
+  window.open(googleCalendarUrl, '_blank');
+}
+
+/**
  * Generate and download an RFC-5545 iCalendar (.ics) file containing all trip activities
  * Compatible with Google Calendar, Apple Calendar, Outlook, and Android.
  */

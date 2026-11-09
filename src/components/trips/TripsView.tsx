@@ -42,7 +42,7 @@ import {
   resolveDestinationIntelligence, 
   DESTINATIONS_DB 
 } from '../../services/aiTripPlanner';
-import { exportTripToIcs, printTripRoadbook } from '../../utils/calendarExport';
+import { exportTripToIcs, printTripRoadbook, openInGoogleCalendar } from '../../utils/calendarExport';
 
 export const getDestinationCover = (dest: string): string => {
   const d = (dest || '').toLowerCase();
@@ -472,6 +472,11 @@ export const TripsView: React.FC = () => {
     exportTripToIcs(trip, acts);
   };
 
+  const handleOpenGoogleCalendar = async (trip: Trip) => {
+    const acts = await db.activities.where('tripId').equals(trip.id).toArray();
+    openInGoogleCalendar(trip, acts);
+  };
+
   const handlePrintRoadbook = async (trip: Trip) => {
     const [places, acts, exps] = await Promise.all([
       db.places.where('tripId').equals(trip.id).toArray(),
@@ -814,13 +819,13 @@ export const TripsView: React.FC = () => {
                 </div>
 
                 <div className="flex items-center space-x-1">
-                  {/* Export Calendar */}
+                  {/* Open in Google Calendar */}
                   <button
-                    onClick={() => handleExportIcs(trip)}
-                    className="p-1.5 text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 rounded-lg transition-colors"
-                    title="Exporter vers Calendrier (.ics)"
+                    onClick={() => handleOpenGoogleCalendar(trip)}
+                    className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                    title="Ouvrir dans Google Calendar"
                   >
-                    <Download className="w-4 h-4" />
+                    <Calendar className="w-4 h-4" />
                   </button>
 
                   {/* Print Roadbook */}
