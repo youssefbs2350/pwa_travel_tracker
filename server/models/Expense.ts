@@ -10,6 +10,7 @@ export interface IExpense extends Document {
   date: string;
   paidBy: string;
   splitWith: string[];
+  splitDetails?: Record<string, number>;
   receiptImage?: string;
   notes?: string;
   createdAt: Date;
@@ -29,6 +30,7 @@ const ExpenseSchema = new Schema<IExpense>({
   date: { type: String, required: true },
   paidBy: { type: String, required: true },
   splitWith: { type: [String], default: [] },
+  splitDetails: { type: Schema.Types.Mixed, default: {} },
   receiptImage: { type: String, default: '' },
   notes: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }

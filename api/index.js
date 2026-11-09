@@ -17031,7 +17031,7 @@ var require_get_intrinsic = __commonJS({
     var throwTypeError = function() {
       throw new $TypeError();
     };
-    var ThrowTypeError = $gOPD ? (function() {
+    var ThrowTypeError = $gOPD ? function() {
       try {
         arguments.callee;
         return throwTypeError;
@@ -17042,7 +17042,7 @@ var require_get_intrinsic = __commonJS({
           return throwTypeError;
         }
       }
-    })() : throwTypeError;
+    }() : throwTypeError;
     var hasSymbols = require_has_symbols()();
     var getProto = require_get_proto();
     var $ObjectGPO = require_Object_getPrototypeOf();
@@ -17306,7 +17306,7 @@ var require_get_intrinsic = __commonJS({
             if (!allowMissing) {
               throw new $TypeError("base intrinsic for " + name2 + " exists, but the property is not available.");
             }
-            return void undefined2;
+            return void 0;
           }
           if ($gOPD && i + 1 >= parts.length) {
             var desc = $gOPD(value, part);
@@ -17582,13 +17582,13 @@ var require_utils2 = __commonJS({
     var getConflictIndex = function getConflictIndex2(obj) {
       return conflictChannel.get(obj);
     };
-    var hexTable = (function() {
+    var hexTable = function() {
       var array = [];
       for (var i = 0; i < 256; ++i) {
         array[array.length] = "%" + ((i < 16 ? "0" : "") + i.toString(16)).toUpperCase();
       }
       return array;
-    })();
+    }();
     var compactQueue = function compactQueue2(queue) {
       while (queue.length > 1) {
         var item = queue.pop();
@@ -18903,17 +18903,11 @@ var require_parseurl = __commonJS({
             }
             break;
           case 9:
-          /* \t */
           case 10:
-          /* \n */
           case 12:
-          /* \f */
           case 13:
-          /* \r */
           case 32:
-          /*    */
           case 35:
-          /* #  */
           case 160:
           case 65279:
             return parse2(str);
@@ -19297,7 +19291,7 @@ var require_ipaddr = __commonJS({
         }
         return defaultName;
       };
-      ipaddr.IPv4 = (function() {
+      ipaddr.IPv4 = function() {
         function IPv4(octets) {
           var k, len, octet;
           if (octets.length !== 4) {
@@ -19382,7 +19376,7 @@ var require_ipaddr = __commonJS({
           return 32 - cidr;
         };
         return IPv4;
-      })();
+      }();
       ipv4Part = "(0?\\d+|0x[a-f0-9]+)";
       ipv4Regexes = {
         fourOctet: new RegExp("^" + ipv4Part + "\\." + ipv4Part + "\\." + ipv4Part + "\\." + ipv4Part + "$", "i"),
@@ -19398,7 +19392,7 @@ var require_ipaddr = __commonJS({
           }
         };
         if (match = string.match(ipv4Regexes.fourOctet)) {
-          return (function() {
+          return function() {
             var k, len, ref, results;
             ref = match.slice(1, 6);
             results = [];
@@ -19407,25 +19401,25 @@ var require_ipaddr = __commonJS({
               results.push(parseIntAuto(part));
             }
             return results;
-          })();
+          }();
         } else if (match = string.match(ipv4Regexes.longValue)) {
           value = parseIntAuto(match[1]);
           if (value > 4294967295 || value < 0) {
             throw new Error("ipaddr: address outside defined range");
           }
-          return (function() {
+          return function() {
             var k, results;
             results = [];
             for (shift = k = 0; k <= 24; shift = k += 8) {
               results.push(value >> shift & 255);
             }
             return results;
-          })().reverse();
+          }().reverse();
         } else {
           return null;
         }
       };
-      ipaddr.IPv6 = (function() {
+      ipaddr.IPv6 = function() {
         function IPv6(parts, zoneId) {
           var i, k, l, len, part, ref;
           if (parts.length === 16) {
@@ -19485,7 +19479,7 @@ var require_ipaddr = __commonJS({
         };
         IPv6.prototype.toNormalizedString = function() {
           var addr, part, suffix;
-          addr = (function() {
+          addr = function() {
             var k, len, ref, results;
             ref = this.parts;
             results = [];
@@ -19494,7 +19488,7 @@ var require_ipaddr = __commonJS({
               results.push(part.toString(16));
             }
             return results;
-          }).call(this).join(":");
+          }.call(this).join(":");
           suffix = "";
           if (this.zoneId) {
             suffix = "%" + this.zoneId;
@@ -19503,7 +19497,7 @@ var require_ipaddr = __commonJS({
         };
         IPv6.prototype.toFixedLengthString = function() {
           var addr, part, suffix;
-          addr = (function() {
+          addr = function() {
             var k, len, ref, results;
             ref = this.parts;
             results = [];
@@ -19512,7 +19506,7 @@ var require_ipaddr = __commonJS({
               results.push(part.toString(16).padStart(4, "0"));
             }
             return results;
-          }).call(this).join(":");
+          }.call(this).join(":");
           suffix = "";
           if (this.zoneId) {
             suffix = "%" + this.zoneId;
@@ -19597,7 +19591,7 @@ var require_ipaddr = __commonJS({
           return 128 - cidr;
         };
         return IPv6;
-      })();
+      }();
       ipv6Part = "(?:[0-9a-f]+::?)+";
       zoneIndex = "%[0-9a-z]{1,}";
       ipv6Regexes = {
@@ -19641,7 +19635,7 @@ var require_ipaddr = __commonJS({
         if (string[string.length - 1] === ":") {
           string = string.slice(0, -1);
         }
-        parts = (function() {
+        parts = function() {
           var k, len, ref, results;
           ref = string.split(":");
           results = [];
@@ -19650,7 +19644,7 @@ var require_ipaddr = __commonJS({
             results.push(parseInt(part, 16));
           }
           return results;
-        })();
+        }();
         return {
           parts,
           zoneId
@@ -23469,7 +23463,6 @@ var require_response = __commonJS({
       var req = this.req;
       var app2 = this.app;
       switch (typeof chunk) {
-        // string defaulting to html
         case "string":
           encoding = "utf8";
           const type = this.get("Content-Type");
@@ -23871,7 +23864,6 @@ var require_response = __commonJS({
               return "\\u003e";
             case 38:
               return "\\u0026";
-            /* istanbul ignore next: unreachable default */
             default:
               return c;
           }
@@ -25950,8 +25942,6 @@ var require_semver = __commonJS({
             this.inc("patch", identifier, identifierBase);
             this.inc("pre", identifier, identifierBase);
             break;
-          // If the input is a non-prerelease version, this acts the same as
-          // prepatch.
           case "prerelease":
             if (this.prerelease.length === 0) {
               this.inc("patch", identifier, identifierBase);
@@ -25985,8 +25975,6 @@ var require_semver = __commonJS({
             }
             this.prerelease = [];
             break;
-          // This probably shouldn't be used publicly.
-          // 1.0.0 'pre' would become 1.0.0-0 which is the wrong direction.
           case "pre": {
             const base2 = Number(identifierBase) ? 1 : 0;
             if (this.prerelease.length === 0) {
@@ -27108,7 +27096,6 @@ var require_min_version = __commonJS({
                 compver.prerelease.push(0);
               }
               compver.raw = compver.format();
-            /* fallthrough */
             case "":
             case ">=":
               if (!setMin || gt(compver, setMin)) {
@@ -27118,7 +27105,6 @@ var require_min_version = __commonJS({
             case "<":
             case "<=":
               break;
-            /* istanbul ignore next */
             default:
               throw new Error(`Unexpected operation: ${comparator.operator}`);
           }
@@ -28672,6 +28658,7 @@ var ExpenseSchema = new Schema5({
   date: { type: String, required: true },
   paidBy: { type: String, required: true },
   splitWith: { type: [String], default: [] },
+  splitDetails: { type: Schema5.Types.Mixed, default: {} },
   receiptImage: { type: String, default: "" },
   notes: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now }
@@ -34620,9 +34607,6 @@ var MimeNode = class _MimeNode {
         return;
       }
       switch (header.key) {
-        // The comments of a MIME header are not part of its value and are dropped, so a
-        // caller supplied 'boundary=b (comment)' is the boundary b it names, and the
-        // header goes out without the comment
         case "Content-Disposition":
           structured = parseHeaderValue(value, { stripComments: true });
           if (this.filename) {
@@ -35225,7 +35209,6 @@ var MimeNode = class _MimeNode {
   encodeHeaderValue(key, value) {
     key = this._normalizeHeaderKey(key);
     switch (key) {
-      // Structured headers
       case "From":
       case "Sender":
       case "To":
@@ -35233,7 +35216,6 @@ var MimeNode = class _MimeNode {
       case "Bcc":
       case "Reply-To":
         return this._convertAddresses(this._parseAddresses(value));
-      // values enclosed in <>
       case "Message-ID":
       case "In-Reply-To":
       case "Content-Id":
@@ -35245,7 +35227,6 @@ var MimeNode = class _MimeNode {
           value = value + ">";
         }
         return value;
-      // space separated list of values enclosed in <>
       case "References": {
         const ids = [];
         for (const entry of [].concat(value || "")) {
@@ -37168,7 +37149,6 @@ var Mail = class extends EventEmitter {
         return this.meta.get("proxy_handler_" + protocol)(proxy, options, callback);
       }
       switch (protocol) {
-        // Connect using a HTTP CONNECT method
         case "http":
         case "https":
           http_proxy_client_default(proxy.href, options.port, options.host, connectionTimeout ? Object.assign({}, this.options.tls, { timeout: connectionTimeout }) : this.options.tls || {}, (err2, socket) => {
@@ -37617,13 +37597,13 @@ var SMTPConnection = class extends EventEmitter2 {
             const remaining = this._connectionDeadline - Date.now();
             opts.autoSelectFamilyAttemptTimeout = Math.max(Math.floor(remaining / ordered.length), 10);
           }
-          opts.lookup = ((hostname, lookupOptions, callback) => {
+          opts.lookup = (hostname, lookupOptions, callback) => {
             if (lookupOptions && lookupOptions.all) {
               const all = ordered.map((address) => ({ address, family: net7.isIPv6(address) ? 6 : 4 }));
               return setImmediate(() => callback(null, all));
             }
             setImmediate(() => callback(null, ordered[0], net7.isIPv6(ordered[0]) ? 6 : 4));
-          });
+          };
         } else if (addresses.length) {
           opts.host = addresses[0];
         }
@@ -42955,11 +42935,19 @@ router5.get("/analytics/:tripId", async (req, res) => {
     expenses.forEach((e) => {
       const payer = e.paidBy;
       const beneficiaries = e.splitWith && e.splitWith.length > 0 ? e.splitWith : participants;
-      const share = e.amount / (beneficiaries.length || 1);
       balances[payer] = (balances[payer] || 0) + e.amount;
-      beneficiaries.forEach((b) => {
-        balances[b] = (balances[b] || 0) - share;
-      });
+      if (e.splitDetails && Object.keys(e.splitDetails).length > 0) {
+        beneficiaries.forEach((b) => {
+          const directKey = Object.keys(e.splitDetails).find((k) => k.toLowerCase() === b.toLowerCase());
+          const share = directKey ? Number(e.splitDetails[directKey]) : e.amount / (beneficiaries.length || 1);
+          balances[b] = (balances[b] || 0) - share;
+        });
+      } else {
+        const share = e.amount / (beneficiaries.length || 1);
+        beneficiaries.forEach((b) => {
+          balances[b] = (balances[b] || 0) - share;
+        });
+      }
     });
     res.json({
       totalSpent,
@@ -43282,9 +43270,9 @@ async function startServer() {
 if (!process.env.VERCEL) {
   startServer();
 }
-var index_default = app;
+var server_default = app;
 export {
-  index_default as default
+  server_default as default
 };
 /*! Bundled license information:
 
@@ -43395,9 +43383,6 @@ type-is/index.js:
    *)
 
 body-parser/lib/read.js:
-body-parser/lib/types/raw.js:
-body-parser/lib/types/text.js:
-body-parser/index.js:
   (*!
    * body-parser
    * Copyright(c) 2014-2015 Douglas Christopher Wilson
@@ -43405,10 +43390,38 @@ body-parser/index.js:
    *)
 
 body-parser/lib/types/json.js:
+  (*!
+   * body-parser
+   * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
+body-parser/lib/types/raw.js:
+  (*!
+   * body-parser
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
+body-parser/lib/types/text.js:
+  (*!
+   * body-parser
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
 body-parser/lib/types/urlencoded.js:
   (*!
    * body-parser
    * Copyright(c) 2014 Jonathan Ong
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
+body-parser/index.js:
+  (*!
+   * body-parser
    * Copyright(c) 2014-2015 Douglas Christopher Wilson
    * MIT Licensed
    *)
@@ -43445,10 +43458,6 @@ finalhandler/index.js:
    *)
 
 express/lib/view.js:
-express/lib/application.js:
-express/lib/request.js:
-express/lib/express.js:
-express/index.js:
   (*!
    * express
    * Copyright(c) 2009-2013 TJ Holowaychuk
@@ -43479,7 +43488,6 @@ proxy-addr/index.js:
    *)
 
 express/lib/utils.js:
-express/lib/response.js:
   (*!
    * express
    * Copyright(c) 2009-2013 TJ Holowaychuk
@@ -43488,12 +43496,35 @@ express/lib/response.js:
    *)
 
 router/lib/layer.js:
+  (*!
+   * router
+   * Copyright(c) 2013 Roman Shtylman
+   * Copyright(c) 2014-2022 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
 router/lib/route.js:
+  (*!
+   * router
+   * Copyright(c) 2013 Roman Shtylman
+   * Copyright(c) 2014-2022 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
 router/index.js:
   (*!
    * router
    * Copyright(c) 2013 Roman Shtylman
    * Copyright(c) 2014-2022 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
+express/lib/application.js:
+  (*!
+   * express
+   * Copyright(c) 2009-2013 TJ Holowaychuk
+   * Copyright(c) 2013 Roman Shtylman
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
    * MIT Licensed
    *)
 
@@ -43537,6 +43568,15 @@ range-parser/index.js:
    * MIT Licensed
    *)
 
+express/lib/request.js:
+  (*!
+   * express
+   * Copyright(c) 2009-2013 TJ Holowaychuk
+   * Copyright(c) 2013 Roman Shtylman
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
 content-disposition/dist/index.js:
   (*!
    * content-disposition
@@ -43567,12 +43607,38 @@ vary/index.js:
    * MIT Licensed
    *)
 
+express/lib/response.js:
+  (*!
+   * express
+   * Copyright(c) 2009-2013 TJ Holowaychuk
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
 serve-static/index.js:
   (*!
    * serve-static
    * Copyright(c) 2010 Sencha Inc.
    * Copyright(c) 2011 TJ Holowaychuk
    * Copyright(c) 2014-2016 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
+express/lib/express.js:
+  (*!
+   * express
+   * Copyright(c) 2009-2013 TJ Holowaychuk
+   * Copyright(c) 2013 Roman Shtylman
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+
+express/index.js:
+  (*!
+   * express
+   * Copyright(c) 2009-2013 TJ Holowaychuk
+   * Copyright(c) 2013 Roman Shtylman
+   * Copyright(c) 2014-2015 Douglas Christopher Wilson
    * MIT Licensed
    *)
 

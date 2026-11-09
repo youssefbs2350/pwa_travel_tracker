@@ -67,12 +67,20 @@ router.get('/analytics/:tripId', async (req: Request, res: Response) => {
     expenses.forEach(e => {
       const payer = e.paidBy;
       const beneficiaries = e.splitWith && e.splitWith.length > 0 ? e.splitWith : participants;
-      const share = e.amount / (beneficiaries.length || 1);
-
+      
       balances[payer] = (balances[payer] || 0) + e.amount;
-      beneficiaries.forEach(b => {
-        balances[b] = (balances[b] || 0) - share;
-      });
+      if (e.splitDetails && Object.keys(e.splitDetails).length > 0) {
+        beneficiaries.forEach(b => {
+          const directKey = Object.keys(e.splitDetails!).find(k => k.toLowerCase() === b.toLowerCase());
+          const share = directKey ? Number(e.splitDetails![directKey]) : (e.amount / (beneficiaries.length || 1));
+          balances[b] = (balances[b] || 0) - share;
+        });
+      } else {
+        const share = e.amount / (beneficiaries.length || 1);
+        beneficiaries.forEach(b => {
+          balances[b] = (balances[b] || 0) - share;
+        });
+      }
     });
 
     res.json({

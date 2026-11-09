@@ -126,6 +126,7 @@ export interface Expense {
   date: string;
   paidBy: string; // user name or participant
   splitWith: string[]; // list of participants sharing this expense
+  splitDetails?: Record<string, number>; // exact amount per participant
   receiptImage?: string;
   notes?: string;
   createdAt: string;
