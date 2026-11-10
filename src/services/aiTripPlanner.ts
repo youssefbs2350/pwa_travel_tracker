@@ -1218,6 +1218,95 @@ export function generateSmartPackingList(dest: DestinationKnowledge, days: numbe
 /**
  * Main AI Engine: Orchestrates Trip, Places, Activities, Budget and Packing List
  */
+
+// ─── Google Gemini API Integration ──────────────────────────────────────────
+async function callGeminiApiForTrip(options: AiGeneratorOptions): Promise<any | null> {
+  const apiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) ||
+                 (typeof process !== 'undefined' && (process.env?.GEMINI_API_KEY || process.env?.VITE_GEMINI_API_KEY)) ||
+                 '';
+
+  const prompt = `Tu es le moteur d'intelligence artificielle de Travel Tracker PWA.
+Génère un programme de voyage complet et réaliste pour :
+- Destination : ${options.destinationQuery}
+- Durée : ${options.days} jours
+- Rythme : ${options.pace} (Relaxed=2 act/j, Balanced=3 act/j, Intense=4 act/j)
+- Thème : ${options.theme}
+- Budget : ${options.budgetTier}
+- Groupe : ${options.groupType}
+
+Réponds STRICTEMENT avec un objet JSON sans markdown, respectant ce format exact :
+{
+  "summary": "Résumé de l'escapade",
+  "insiderTips": ["Conseil local 1", "Conseil local 2", "Conseil local 3"],
+  "meta": {
+    "timezone": "UTC+1",
+    "language": "Français & Arabe",
+    "currency": "EUR",
+    "bestMonths": "Avril à Octobre"
+  },
+  "packing": ["Passeport", "Adaptateur", "Chaussures de marche", "Crème solaire"],
+  "activities": [
+    {
+      "day": 1,
+      "order": 0,
+      "name": "Nom du lieu",
+      "category": "Monuments",
+      "address": "Quartier, Ville",
+      "startTime": "09:30",
+      "endTime": "11:30",
+      "duration": 120,
+      "cost": 15,
+      "rating": 4.8,
+      "notes": "Description de l'activité"
+    }
+  ]
+}`;
+
+  try {
+    // 1. Appel direct API Gemini si clé configurée
+    if (apiKey) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 2048,
+            responseMimeType: "application/json"
+          }
+        })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          const parsed = JSON.parse(text.replace(/\`\`\`json|\`\`\`/g, '').trim());
+          console.log('[Gemini API] Itinéraire généré avec succès par Google Gemini 1.5 Flash !');
+          return parsed;
+        }
+      }
+    }
+
+    // 2. Appel du proxy backend Gemini si présent
+    const backendRes = await fetch('/api/trips/gemini-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options)
+    });
+    if (backendRes.ok) {
+      const bData = await backendRes.json();
+      if (bData && bData.activities) {
+        return bData;
+      }
+    }
+  } catch (err) {
+    console.warn('[Gemini API] Bascule automatique vers le moteur local haute fidélité:', err);
+  }
+
+  return null;
+}
+
 export async function generateFullSmartTrip(options: AiGeneratorOptions): Promise<AiGeneratedTripResult> {
   const {
     destinationQuery,

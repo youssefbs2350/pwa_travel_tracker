@@ -2,15 +2,15 @@ import { Router, Request, Response } from 'express';
 import { ComplaintModel } from '../models/Complaint';
 import { UserModel } from '../models/User';
 import { TripModel } from '../models/Trip';
-import { sendComplaintStatusEmail } from '../mailer';
+import { sendComplaintStatusEmail, sendComplaintCreationEmail } from '../mailer';
 
 const router = Router();
 
-// GET complaints by tripId
+// GET complaints (all complaints or filtered by tripId)
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { tripId } = req.query;
-    const query = tripId ? { tripId } : {};
+    const query = tripId && tripId !== 'all' && tripId !== 'undefined' ? { tripId } : {};
     const complaints = await ComplaintModel.find(query).sort({ createdAt: -1 });
     res.json(complaints);
   } catch (err) {
@@ -18,7 +18,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// POST complaint
+// POST complaint + Confirmation Email to Traveler
 router.post('/', async (req: Request, res: Response) => {
   try {
     const complaintData = { ...req.body };
@@ -50,7 +50,51 @@ router.post('/', async (req: Request, res: Response) => {
 
     const complaint = new ComplaintModel(complaintData);
     await complaint.save();
-    res.status(201).json(complaint);
+
+    let emailSent = false;
+    let emailStatusMessage = '';
+
+    // Envoi immédiat du mail de confirmation au voyageur déclarant
+    if (complaint.userEmail) {
+      let tripTitle = '';
+      if (complaint.tripId) {
+        try {
+          const trip = await TripModel.findById(complaint.tripId);
+          if (trip?.title) tripTitle = trip.title;
+        } catch {
+          // ignore
+        }
+      }
+
+      try {
+        const mailRes = await sendComplaintCreationEmail({
+          to: complaint.userEmail,
+          userName: complaint.userName,
+          complaintTitle: complaint.title,
+          category: complaint.category,
+          priority: complaint.priority,
+          tripTitle,
+          requestedCompensation: complaint.requestedCompensation,
+          complaintId: complaint._id?.toString() || complaint.id
+        });
+        emailSent = mailRes.sent;
+        emailStatusMessage = mailRes.message;
+
+        // Mettre à jour l'entrée d'historique avec emailSent = true
+        if (emailSent && complaint.history && complaint.history.length > 0) {
+          complaint.history[0].emailSent = true;
+          await complaint.save();
+        }
+      } catch (err) {
+        console.error('Erreur envoi email confirmation création réclamation:', err);
+      }
+    }
+
+    res.status(201).json({
+      ...complaint.toObject(),
+      emailSent,
+      emailStatusMessage
+    });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

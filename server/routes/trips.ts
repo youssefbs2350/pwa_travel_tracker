@@ -320,4 +320,73 @@ router.post('/generate', async (req: Request, res: Response) => {
   }
 });
 
+
+// POST /api/trips/gemini-plan : Génération d'itinéraire via Google Gemini 1.5 Flash
+router.post('/gemini-plan', async (req: Request, res: Response) => {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: 'GEMINI_API_KEY non configurée' });
+  }
+
+  const { destinationQuery, days = 4, pace = 'Balanced', theme = 'Culture & Découverte', budgetTier = 'Équilibré', groupType = 'Couple' } = req.body;
+
+  const prompt = `Tu es le moteur d'intelligence artificielle de Travel Tracker PWA.
+Génère un programme de voyage complet et réaliste pour :
+- Destination : ${destinationQuery}
+- Durée : ${days} jours
+- Rythme : ${pace}
+- Thème : ${theme}
+- Budget : ${budgetTier}
+- Groupe : ${groupType}
+
+Réponds STRICTEMENT avec un objet JSON sans markdown, respectant ce format :
+{
+  "summary": "Résumé de l'escapade",
+  "insiderTips": ["Conseil 1", "Conseil 2"],
+  "meta": { "timezone": "UTC+1", "language": "Français", "currency": "EUR", "bestMonths": "Avril à Octobre" },
+  "packing": ["Passeport", "Adaptateur", "Chaussures de marche"],
+  "activities": [
+    {
+      "day": 1,
+      "order": 0,
+      "name": "Nom du lieu",
+      "category": "Monuments",
+      "address": "Quartier, Ville",
+      "startTime": "09:30",
+      "endTime": "11:30",
+      "duration": 120,
+      "cost": 15,
+      "rating": 4.8,
+      "notes": "Description de l'activité"
+    }
+  ]
+}`;
+
+  try {
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 2048,
+          responseMimeType: "application/json"
+        }
+      })
+    });
+
+    if (!geminiRes.ok) {
+      return res.status(geminiRes.status).json({ error: 'Erreur appel API Gemini' });
+    }
+
+    const json = await geminiRes.json();
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+    const parsed = JSON.parse(text.replace(/\`\`\`json|\`\`\`/g, '').trim());
+    res.json(parsed);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 export default router;

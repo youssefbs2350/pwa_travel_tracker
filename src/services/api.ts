@@ -639,6 +639,21 @@ export const api = {
 
   // COMPLAINTS (Amine)
   complaints: {
+    async getAll(): Promise<Complaint[]> {
+      try {
+        const res = await fetch('/api/complaints');
+        if (res.ok) {
+          const list = await res.json();
+          const formatted = list.map((c: any) => ({ ...c, id: c._id || c.id }));
+          await db.complaints.bulkPut(formatted);
+          return formatted;
+        }
+      } catch {
+        console.log('[API] Réclamations globales lues depuis IndexedDB');
+      }
+      return db.complaints.toArray();
+    },
+
     async getByTrip(tripId: string): Promise<Complaint[]> {
       try {
         const res = await fetch(`/api/complaints?tripId=${tripId}`);

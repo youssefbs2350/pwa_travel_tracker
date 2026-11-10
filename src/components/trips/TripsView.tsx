@@ -146,6 +146,7 @@ export const TripsView: React.FC = () => {
   const [status, setStatus] = useState<TripStatus>('Planifié');
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [extraParticipantText, setExtraParticipantText] = useState('');
+  const [aiDestinationSuggestion, setAiDestinationSuggestion] = useState<string | null>(null);
 
   // AI Generator States
   const [genDestination, setGenDestination] = useState('Djerba, Tunisie');

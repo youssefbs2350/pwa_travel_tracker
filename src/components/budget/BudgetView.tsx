@@ -58,6 +58,7 @@ export const BudgetView: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [categoryViewScope, setCategoryViewScope] = useState<'personal' | 'trip'>('personal');
   const canManageAllExpenses = currentUser?.role === 'Admin' || currentUser?.role === 'Organizer';
 
   const currentUserName = currentUser?.name?.trim() || 'Moi';

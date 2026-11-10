@@ -47,7 +47,7 @@ export const ComplaintsView: React.FC = () => {
   
   // Navigation Tabs: "Mes réclamations créées" vs "Toutes" vs "À traiter"
   const [activeTab, setActiveTab] = useState<ViewTab>(
-    currentUser?.role === 'Traveler' ? 'my_complaints' : 'all'
+    currentUser?.role === 'Traveler' ? 'my_complaints' : 'pending'
   );
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
@@ -112,14 +112,20 @@ export const ComplaintsView: React.FC = () => {
   };
 
   const loadComplaints = async () => {
-    if (!activeTrip) return;
-    const items = await api.complaints.getByTrip(activeTrip.id);
-    setComplaints(items);
+    try {
+      // Les organisateurs et admins accèdent à toutes les réclamations pour arbitrage même si aucun voyage n'est sélectionné
+      const items = canManageComplaints 
+        ? await api.complaints.getAll() 
+        : (activeTrip ? await api.complaints.getByTrip(activeTrip.id) : await api.complaints.getAll());
+      setComplaints(items);
+    } catch (err) {
+      console.error('Erreur chargement réclamations:', err);
+    }
   };
 
   useEffect(() => {
     loadComplaints();
-  }, [activeTrip?.id]);
+  }, [activeTrip?.id, currentUser?.role]);
 
   const handleCreateComplaint = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,6 +156,13 @@ export const ComplaintsView: React.FC = () => {
     await loadComplaints();
     if (created) {
       setSelectedComplaint(created);
+      if ((created as any)?.emailSent) {
+        setStatusNotification({
+          type: 'success',
+          message: `✉️ Réclamation enregistrée ! Un email de confirmation a été envoyé à ${currentUser?.email || 'votre adresse'}.`
+        });
+        setTimeout(() => setStatusNotification(null), 8000);
+      }
     }
     setIsAddModalOpen(false);
     setTitle('');
@@ -300,13 +313,14 @@ export const ComplaintsView: React.FC = () => {
 
   // Filter based on active tab
   const tabFilteredComplaints = complaints.filter(c => {
-    if (isTraveler || activeTab === 'my_complaints') {
+    if (activeTab === 'my_complaints') {
       return isCreatedByCurrentUser(c);
     }
     if (activeTab === 'pending') {
       return c.status === 'Soumis' || c.status === "En cours d'analyse";
     }
-    return true; // 'all' for Admin / Organizer
+    // 'all' tab shows all complaints (for Admin/Organizer, or traveler on all)
+    return isTraveler ? isCreatedByCurrentUser(c) : true;
   });
 
   // Final filtered list including status filter

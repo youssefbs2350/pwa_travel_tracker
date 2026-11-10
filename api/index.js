@@ -42297,6 +42297,117 @@ async function sendComplaintStatusEmail({
     return { sent: false, message: `Erreur SMTP : ${msg}` };
   }
 }
+async function sendComplaintCreationEmail({
+  to,
+  userName,
+  complaintTitle,
+  category,
+  priority,
+  tripTitle,
+  requestedCompensation,
+  complaintId
+}) {
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                max-width: 580px; margin: 0 auto; background-color: #0f172a;
+                border-radius: 16px; overflow: hidden; border: 1px solid #1e293b; color: #f8fafc;">
+      <div style="background: linear-gradient(135deg, #0284c7, #0d9488); padding: 32px 24px; text-align: center;">
+        <h1 style="margin: 0; color: #fff; font-size: 22px; font-weight: 800;">
+          &#128233; R\xE9clamation Bien Re\xE7ue &bull; Prise en Charge
+        </h1>
+        <p style="margin: 6px 0 0; color: rgba(255,255,255,0.9); font-size: 13px;">
+          Travel Tracker Support &bull; Service Litiges &amp; Assistance Voyageur
+        </p>
+      </div>
+
+      <div style="padding: 32px 24px;">
+        <p style="font-size: 15px; color: #e2e8f0; margin-top: 0;">
+          Bonjour ${userName || "Voyageur"},
+        </p>
+        <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">
+          Nous vous confirmons l&rsquo;enregistrement imm&eacute;diat de votre dossier de r&eacute;clamation sur la plateforme Travel Tracker. Nos &eacute;quipes d&rsquo;assistance et les organisateurs de votre s&eacute;jour ont &eacute;t&eacute; notifi&eacute;s pour arbitrage.
+        </p>
+
+        <!-- Ticket Card -->
+        <div style="background-color: #1e293b; border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #334155;">
+          <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 6px;">
+            R&eacute;capitulatif de votre signalement
+          </div>
+          <h2 style="font-size: 17px; font-weight: 800; color: #fff; margin: 0 0 10px 0;">
+            ${complaintTitle}
+          </h2>
+
+          <div style="display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; color: #38bdf8; background-color: #0369a125; border: 1px solid #0284c740; margin-bottom: 14px;">
+            Statut actuel : Soumis &bull; En attente d'arbitrage
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #cbd5e1; margin-top: 8px;">
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8; width: 40%;">Cat\xE9gorie :</td>
+              <td style="padding: 6px 0; font-weight: 600; color: #f1f5f9;">${category}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Niveau d'urgence :</td>
+              <td style="padding: 6px 0; font-weight: 700; color: #f59e0b;">${priority}</td>
+            </tr>
+            ${tripTitle ? `
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Voyage concern\xE9 :</td>
+              <td style="padding: 6px 0; font-weight: 600; color: #38bdf8;">&#9992; ${tripTitle}</td>
+            </tr>` : ""}
+            ${complaintId ? `
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Num\xE9ro de dossier :</td>
+              <td style="padding: 6px 0; font-family: monospace; font-size: 11px; color: #94a3b8;">${complaintId}</td>
+            </tr>` : ""}
+          </table>
+        </div>
+
+        ${requestedCompensation ? `
+        <div style="background-color: #0c4a6e30; border: 1px solid #0284c7; border-radius: 12px; padding: 14px 18px; margin: 20px 0;">
+          <div style="font-size: 11px; font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px;">
+            D\xE9dommagement sollicit\xE9 :
+          </div>
+          <div style="font-size: 15px; font-weight: 700; color: #e0f2fe;">
+            ${requestedCompensation}
+          </div>
+        </div>` : ""}
+
+        <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; margin-top: 24px;">
+          Vous recevrez automatiquement un email d&egrave;s qu&rsquo;un organisateur met &agrave; jour l&rsquo;&eacute;tat d&rsquo;avancement de votre r&eacute;clamation ou arbitre une compensation.
+        </p>
+      </div>
+
+      <div style="background-color: #090d16; padding: 16px 24px; border-top: 1px solid #1e293b;
+                  text-align: center; font-size: 11px; color: #475569;">
+        Travel Tracker PWA &bull; Support &amp; Litiges Voyageurs
+      </div>
+    </div>
+  `;
+  if (!hasSmtpConfig()) {
+    console.warn("[SMTP Complaints] SMTP non configur\xE9, email de confirmation non envoy\xE9.");
+    return {
+      sent: false,
+      message: "SMTP non configur\xE9 dans les variables d'environnement."
+    };
+  }
+  try {
+    const transporter = createTransporter();
+    await transporter.sendMail({
+      from: getSmtpFrom(),
+      to,
+      subject: `[Support Travel Tracker] Confirmation de votre r\xE9clamation : "${complaintTitle}"`,
+      text: `Votre r\xE9clamation "${complaintTitle}" a bien \xE9t\xE9 enregistr\xE9e (Statut: Soumis, Priorit\xE9: ${priority}). R\xE9f: ${complaintId || "En cours"}.`,
+      html
+    });
+    console.log(`[SMTP Complaints] Email de confirmation de cr\xE9ation envoy\xE9 \xE0 ${to}`);
+    return { sent: true, message: `Email de confirmation envoy\xE9 avec succ\xE8s \xE0 ${to}` };
+  } catch (err) {
+    const msg = err.message;
+    console.error("[SMTP Complaints Creation Error]", msg);
+    return { sent: false, message: `Erreur SMTP : ${msg}` };
+  }
+}
 
 // server/routes/users.ts
 var router = (0, import_express.Router)();
@@ -42859,6 +42970,67 @@ router2.post("/generate", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router2.post("/gemini-plan", async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: "GEMINI_API_KEY non configur\xE9e" });
+  }
+  const { destinationQuery, days = 4, pace = "Balanced", theme = "Culture & D\xE9couverte", budgetTier = "\xC9quilibr\xE9", groupType = "Couple" } = req.body;
+  const prompt = `Tu es le moteur d'intelligence artificielle de Travel Tracker PWA.
+G\xE9n\xE8re un programme de voyage complet et r\xE9aliste pour :
+- Destination : ${destinationQuery}
+- Dur\xE9e : ${days} jours
+- Rythme : ${pace}
+- Th\xE8me : ${theme}
+- Budget : ${budgetTier}
+- Groupe : ${groupType}
+
+R\xE9ponds STRICTEMENT avec un objet JSON sans markdown, respectant ce format :
+{
+  "summary": "R\xE9sum\xE9 de l'escapade",
+  "insiderTips": ["Conseil 1", "Conseil 2"],
+  "meta": { "timezone": "UTC+1", "language": "Fran\xE7ais", "currency": "EUR", "bestMonths": "Avril \xE0 Octobre" },
+  "packing": ["Passeport", "Adaptateur", "Chaussures de marche"],
+  "activities": [
+    {
+      "day": 1,
+      "order": 0,
+      "name": "Nom du lieu",
+      "category": "Monuments",
+      "address": "Quartier, Ville",
+      "startTime": "09:30",
+      "endTime": "11:30",
+      "duration": 120,
+      "cost": 15,
+      "rating": 4.8,
+      "notes": "Description de l'activit\xE9"
+    }
+  ]
+}`;
+  try {
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 2048,
+          responseMimeType: "application/json"
+        }
+      })
+    });
+    if (!geminiRes.ok) {
+      return res.status(geminiRes.status).json({ error: "Erreur appel API Gemini" });
+    }
+    const json = await geminiRes.json();
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+    const parsed = JSON.parse(text.replace(/\`\`\`json|\`\`\`/g, "").trim());
+    res.json(parsed);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 var trips_default = router2;
 
 // server/routes/places.ts
@@ -43352,7 +43524,7 @@ var router7 = (0, import_express7.Router)();
 router7.get("/", async (req, res) => {
   try {
     const { tripId } = req.query;
-    const query = tripId ? { tripId } : {};
+    const query = tripId && tripId !== "all" && tripId !== "undefined" ? { tripId } : {};
     const complaints = await ComplaintModel.find(query).sort({ createdAt: -1 });
     res.json(complaints);
   } catch (err) {
@@ -43384,7 +43556,43 @@ router7.post("/", async (req, res) => {
     complaintData.history = [initialHistoryEntry];
     const complaint = new ComplaintModel(complaintData);
     await complaint.save();
-    res.status(201).json(complaint);
+    let emailSent = false;
+    let emailStatusMessage = "";
+    if (complaint.userEmail) {
+      let tripTitle = "";
+      if (complaint.tripId) {
+        try {
+          const trip = await TripModel.findById(complaint.tripId);
+          if (trip?.title) tripTitle = trip.title;
+        } catch {
+        }
+      }
+      try {
+        const mailRes = await sendComplaintCreationEmail({
+          to: complaint.userEmail,
+          userName: complaint.userName,
+          complaintTitle: complaint.title,
+          category: complaint.category,
+          priority: complaint.priority,
+          tripTitle,
+          requestedCompensation: complaint.requestedCompensation,
+          complaintId: complaint._id?.toString() || complaint.id
+        });
+        emailSent = mailRes.sent;
+        emailStatusMessage = mailRes.message;
+        if (emailSent && complaint.history && complaint.history.length > 0) {
+          complaint.history[0].emailSent = true;
+          await complaint.save();
+        }
+      } catch (err) {
+        console.error("Erreur envoi email confirmation cr\xE9ation r\xE9clamation:", err);
+      }
+    }
+    res.status(201).json({
+      ...complaint.toObject(),
+      emailSent,
+      emailStatusMessage
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

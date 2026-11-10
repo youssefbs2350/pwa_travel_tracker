@@ -544,25 +544,6 @@ export const AuthScreen: React.FC = () => {
               {/* 1. LOGIN MODE */}
               {mode === 'LOGIN' && (
                 <div className="space-y-4">
-                  {/* Google Sign In Button */}
-                  <button
-                    type="button"
-                    onClick={handleGoogleSignInClick}
-                    disabled={isSubmitting || isGoogleLoading}
-                    className="w-full py-2.5 px-4 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-750 hover:border-slate-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center space-x-3 transition-all duration-200 shadow-sm hover:shadow active:scale-[0.99] disabled:opacity-60"
-                  >
-                    <GoogleIcon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                    <span>{isGoogleLoading ? 'Connexion Google en cours...' : 'Se connecter avec Google'}</span>
-                  </button>
-
-                  {/* Separator */}
-                  <div className="relative flex items-center justify-center py-0.5">
-                    <div className="border-t border-slate-800 w-full"></div>
-                    <span className="bg-slate-900 px-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold absolute">
-                      ou par e-mail
-                    </span>
-                  </div>
-
                   <form onSubmit={handleLoginSubmit} className="space-y-4">
                     <div>
                       <label className="block text-xs font-semibold text-slate-300 mb-1">Adresse Email</label>
@@ -628,25 +609,6 @@ export const AuthScreen: React.FC = () => {
               {/* 2. REGISTER MODE */}
               {mode === 'REGISTER' && (
                 <div className="space-y-3.5">
-                  {/* Google Sign Up Button */}
-                  <button
-                    type="button"
-                    onClick={handleGoogleSignInClick}
-                    disabled={isSubmitting || isGoogleLoading}
-                    className="w-full py-2.5 px-4 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-750 hover:border-slate-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center space-x-3 transition-all duration-200 shadow-sm hover:shadow active:scale-[0.99] disabled:opacity-60"
-                  >
-                    <GoogleIcon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                    <span>{isGoogleLoading ? 'Création Google en cours...' : 'S\'inscrire avec Google'}</span>
-                  </button>
-
-                  {/* Separator */}
-                  <div className="relative flex items-center justify-center py-0.5">
-                    <div className="border-t border-slate-800 w-full"></div>
-                    <span className="bg-slate-900 px-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold absolute">
-                      ou inscription manuelle
-                    </span>
-                  </div>
-
                   <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
                     <AvatarPicker
                       value={avatar}
@@ -877,14 +839,7 @@ export const AuthScreen: React.FC = () => {
         </div>
       </main>
 
-      {/* Google Auth Modal (Selector & Dev simulator) */}
-      <GoogleAuthModal
-        isOpen={showGoogleModal}
-        onClose={() => setShowGoogleModal(false)}
-        onSelectAccount={handleSelectGoogleAccount}
-        isSubmitting={isGoogleLoading}
-      />
-
+      
       {/* Footer */}
       <footer className="relative z-20 border-t border-slate-900 bg-slate-950/80 py-4 text-center text-xs text-slate-500">
         <p>© 2026 Travel Tracker PWA • Plateforme de Gestion de Voyages Intelligente</p>

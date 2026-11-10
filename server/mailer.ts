@@ -10,6 +10,17 @@ export interface SendResetEmailParams {
   userName?: string;
 }
 
+export interface SendComplaintCreationEmailParams {
+  to: string;
+  userName?: string;
+  complaintTitle: string;
+  category: string;
+  priority: string;
+  tripTitle?: string;
+  requestedCompensation?: string;
+  complaintId?: string;
+}
+
 export interface SendComplaintStatusEmailParams {
   to: string;
   userName?: string;
@@ -440,6 +451,122 @@ export async function sendComplaintStatusEmail({
   } catch (err) {
     const msg = (err as Error).message;
     console.error('[SMTP Complaints Error]', msg);
+    return { sent: false, message: `Erreur SMTP : ${msg}` };
+  }
+}
+
+
+// ─── Complaint Creation Confirmation Email ──────────────────────────────────────
+export async function sendComplaintCreationEmail({
+  to,
+  userName,
+  complaintTitle,
+  category,
+  priority,
+  tripTitle,
+  requestedCompensation,
+  complaintId,
+}: SendComplaintCreationEmailParams): Promise<{ sent: boolean; message: string }> {
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                max-width: 580px; margin: 0 auto; background-color: #0f172a;
+                border-radius: 16px; overflow: hidden; border: 1px solid #1e293b; color: #f8fafc;">
+      <div style="background: linear-gradient(135deg, #0284c7, #0d9488); padding: 32px 24px; text-align: center;">
+        <h1 style="margin: 0; color: #fff; font-size: 22px; font-weight: 800;">
+          &#128233; Réclamation Bien Reçue &bull; Prise en Charge
+        </h1>
+        <p style="margin: 6px 0 0; color: rgba(255,255,255,0.9); font-size: 13px;">
+          Travel Tracker Support &bull; Service Litiges &amp; Assistance Voyageur
+        </p>
+      </div>
+
+      <div style="padding: 32px 24px;">
+        <p style="font-size: 15px; color: #e2e8f0; margin-top: 0;">
+          Bonjour ${userName || 'Voyageur'},
+        </p>
+        <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">
+          Nous vous confirmons l&rsquo;enregistrement imm&eacute;diat de votre dossier de r&eacute;clamation sur la plateforme Travel Tracker. Nos &eacute;quipes d&rsquo;assistance et les organisateurs de votre s&eacute;jour ont &eacute;t&eacute; notifi&eacute;s pour arbitrage.
+        </p>
+
+        <!-- Ticket Card -->
+        <div style="background-color: #1e293b; border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #334155;">
+          <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 6px;">
+            R&eacute;capitulatif de votre signalement
+          </div>
+          <h2 style="font-size: 17px; font-weight: 800; color: #fff; margin: 0 0 10px 0;">
+            ${complaintTitle}
+          </h2>
+
+          <div style="display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; color: #38bdf8; background-color: #0369a125; border: 1px solid #0284c740; margin-bottom: 14px;">
+            Statut actuel : Soumis &bull; En attente d'arbitrage
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #cbd5e1; margin-top: 8px;">
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8; width: 40%;">Catégorie :</td>
+              <td style="padding: 6px 0; font-weight: 600; color: #f1f5f9;">${category}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Niveau d'urgence :</td>
+              <td style="padding: 6px 0; font-weight: 700; color: #f59e0b;">${priority}</td>
+            </tr>
+            ${tripTitle ? `
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Voyage concerné :</td>
+              <td style="padding: 6px 0; font-weight: 600; color: #38bdf8;">&#9992; ${tripTitle}</td>
+            </tr>` : ''}
+            ${complaintId ? `
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Numéro de dossier :</td>
+              <td style="padding: 6px 0; font-family: monospace; font-size: 11px; color: #94a3b8;">${complaintId}</td>
+            </tr>` : ''}
+          </table>
+        </div>
+
+        ${requestedCompensation ? `
+        <div style="background-color: #0c4a6e30; border: 1px solid #0284c7; border-radius: 12px; padding: 14px 18px; margin: 20px 0;">
+          <div style="font-size: 11px; font-weight: bold; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px;">
+            Dédommagement sollicité :
+          </div>
+          <div style="font-size: 15px; font-weight: 700; color: #e0f2fe;">
+            ${requestedCompensation}
+          </div>
+        </div>` : ''}
+
+        <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; margin-top: 24px;">
+          Vous recevrez automatiquement un email d&egrave;s qu&rsquo;un organisateur met &agrave; jour l&rsquo;&eacute;tat d&rsquo;avancement de votre r&eacute;clamation ou arbitre une compensation.
+        </p>
+      </div>
+
+      <div style="background-color: #090d16; padding: 16px 24px; border-top: 1px solid #1e293b;
+                  text-align: center; font-size: 11px; color: #475569;">
+        Travel Tracker PWA &bull; Support &amp; Litiges Voyageurs
+      </div>
+    </div>
+  `;
+
+  if (!hasSmtpConfig()) {
+    console.warn('[SMTP Complaints] SMTP non configuré, email de confirmation non envoyé.');
+    return {
+      sent: false,
+      message: "SMTP non configuré dans les variables d'environnement."
+    };
+  }
+
+  try {
+    const transporter = createTransporter();
+    await transporter.sendMail({
+      from: getSmtpFrom(),
+      to,
+      subject: `[Support Travel Tracker] Confirmation de votre réclamation : "${complaintTitle}"`,
+      text: `Votre réclamation "${complaintTitle}" a bien été enregistrée (Statut: Soumis, Priorité: ${priority}). Réf: ${complaintId || 'En cours'}.`,
+      html,
+    });
+    console.log(`[SMTP Complaints] Email de confirmation de création envoyé à ${to}`);
+    return { sent: true, message: `Email de confirmation envoyé avec succès à ${to}` };
+  } catch (err) {
+    const msg = (err as Error).message;
+    console.error('[SMTP Complaints Creation Error]', msg);
     return { sent: false, message: `Erreur SMTP : ${msg}` };
   }
 }

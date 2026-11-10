@@ -35,7 +35,7 @@ export const MemoriesView: React.FC = () => {
   const { currentUser } = useAuth();
   const { currency: userCurrency, format, convert } = useAppCurrency();
   
-  const [activeTab, setActiveTab] = useState<'memories' | 'gallery' | 'history' | 'reviews' | 'recommendations'>('memories');
+  const [activeTab, setActiveTab] = useState<'memories' | 'gallery' | 'history' | 'reviews'>('memories');
   const [memories, setMemories] = useState<Memory[]>([]);
   const [allSavedMemories, setAllSavedMemories] = useState<Memory[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -94,6 +94,7 @@ export const MemoriesView: React.FC = () => {
 
   // Review Form (strictly bound to past visited places)
   const [selectedPastPlaceKey, setSelectedPastPlaceKey] = useState<string>('');
+  const [customPlaceName, setCustomPlaceName] = useState<string>('');
   const [revRating, setRevRating] = useState(5);
   const [revComment, setRevComment] = useState('');
   const [revTags, setRevTags] = useState('Incontournable, À refaire');
@@ -117,22 +118,15 @@ export const MemoriesView: React.FC = () => {
     const revs = await db.reviews.toArray();
     setReviews(revs);
 
-    // Load visited places from completed/past trips
-    if (pastTrips.length > 0) {
-      const pastTripIds = pastTrips.map(t => t.id);
-      const allPlaces = await db.places.toArray();
-      const visited = allPlaces
-        .filter(p => pastTripIds.includes(p.tripId))
-        .map(p => {
-          const trip = pastTrips.find(t => t.id === p.tripId)!;
-          return { place: p, trip };
-        });
-      setPastPlaces(visited);
-      if (visited.length > 0 && !selectedPastPlaceKey) {
-        setSelectedPastPlaceKey(`${visited[0].place.id}::${visited[0].trip.id}`);
-      }
-    } else {
-      setPastPlaces([]);
+    // Charger tous les lieux disponibles pour donner un avis librement
+    const allPlaces = await db.places.toArray();
+    const available = allPlaces.map(p => {
+      const trip = trips.find(t => t.id === p.tripId);
+      return { place: p, trip: trip || { id: p.tripId || 'trip-gen', title: 'Voyage', destination: p.address || 'Destination' } as Trip };
+    });
+    setPastPlaces(available);
+    if (available.length > 0 && !selectedPastPlaceKey) {
+      setSelectedPastPlaceKey(`${available[0].place.id}::${available[0].trip.id}`);
     }
   };
 
@@ -251,16 +245,28 @@ export const MemoriesView: React.FC = () => {
 
   const handleCreateReview = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPastPlaceKey) {
-      alert("Veuillez sélectionner un lieu visité lors d'un voyage passé.");
-      return;
+    let placeId = 'custom';
+    let tripId = activeTrip?.id || 'trip-default';
+    let placeName = customPlaceName.trim();
+    let tripTitle = activeTrip?.title || 'Voyage';
+    let tripDestination = activeTrip?.destination || '';
+
+    if (selectedPastPlaceKey && selectedPastPlaceKey !== 'custom') {
+      const [pId, tId] = selectedPastPlaceKey.split('::');
+      placeId = pId;
+      tripId = tId;
+      const foundEntry = pastPlaces.find(p => p.place.id === pId && p.trip.id === tId);
+      if (foundEntry) {
+        placeName = foundEntry.place.name;
+        tripTitle = foundEntry.trip.title;
+        tripDestination = foundEntry.trip.destination;
+      }
     }
 
-    const [placeId, tripId] = selectedPastPlaceKey.split('::');
-    const pastEntry = pastPlaces.find(p => p.place.id === placeId && p.trip.id === tripId);
-    const placeName = pastEntry ? pastEntry.place.name : 'Lieu visité';
-    const tripTitle = pastEntry ? pastEntry.trip.title : 'Voyage passé';
-    const tripDestination = pastEntry ? pastEntry.trip.destination : '';
+    if (!placeName) {
+      alert("Veuillez indiquer ou sélectionner le nom du lieu.");
+      return;
+    }
 
     const newRev: Review = {
       id: 'rev-' + Date.now(),
@@ -418,17 +424,7 @@ export const MemoriesView: React.FC = () => {
           <span>Avis Vérifiés ({reviews.length})</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('recommendations')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'recommendations'
-              ? 'bg-gradient-to-r from-amber-500 to-pink-500 text-slate-950 shadow-md font-extrabold'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          <Sparkles className="w-4 h-4" />
-          <span>Recommandations IA ({recommendations.length})</span>
-        </button>
+        
       </div>
 
       {/* TAB 1: SOUVENIRS JOURNAL (Current Active Trip) */}
@@ -769,70 +765,6 @@ export const MemoriesView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 5: AI RECOMMENDATIONS ENGINE */}
-      {activeTab === 'recommendations' && (
-        <div className="space-y-6">
-          <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-pink-500/10 to-indigo-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-center space-x-3">
-            <Sparkles className="w-6 h-6 text-amber-400 flex-shrink-0" />
-            <div>
-              <strong className="font-bold text-white">Algorithme d'affinité personnalisée :</strong>
-              <p className="mt-0.5 text-slate-300">
-                Ces recommandations sont calculées à partir de vos centres d'intérêt ({currentUser?.preferences.interests?.join(', ') || 'Culture'}) et des avis certifiés de la communauté.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {recommendations.map(rec => (
-              <div
-                key={rec.id}
-                className="group p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-500/50 transition-all shadow-xl flex flex-col justify-between space-y-4"
-              >
-                <div className="space-y-3">
-                  <div className="relative h-40 w-full rounded-xl overflow-hidden bg-slate-950">
-                    <img
-                      src={rec.imageUrl}
-                      alt={rec.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute top-2 right-2 bg-gradient-to-r from-amber-500 to-pink-500 text-slate-950 px-2.5 py-0.5 rounded-full text-xs font-extrabold shadow">
-                      {rec.score}% Match
-                    </div>
-                    <div className="absolute bottom-2 left-2 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-amber-300 font-semibold border border-amber-500/30">
-                      {rec.category} • ~{rec.suggestedDuration}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-sm font-bold text-white group-hover:text-amber-400 transition-colors">
-                      {rec.title}
-                    </h4>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      {rec.reason}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-400">
-                    {rec.estimatedCost > 0 
-                      ? `~${format(convert(rec.estimatedCost, 'EUR'), userCurrency)}` 
-                      : 'Gratuit'}
-                  </span>
-                  <button
-                    onClick={() => handleAdoptRecommendation(rec)}
-                    className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all shadow-sm"
-                  >
-                    <span>Ajouter au Voyage</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* FULLSCREEN LIGHTBOX / SOUVENIR VIEWER */}
       {currentViewingMemory && (
         <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
@@ -1142,59 +1074,54 @@ export const MemoriesView: React.FC = () => {
         </form>
       </Modal>
 
-      {/* Modal: Review (Strictly based on past visited places) */}
+      {/* Modal: Review (Accessible sur tout lieu ou saisie libre) */}
       <Modal
         isOpen={isReviewModalOpen}
         onClose={() => setIsReviewModalOpen(false)}
-        title="Donner un Avis Vérifié"
-        subtitle="Seuls les lieux effectivement visités lors de séjours passés sont éligibles"
+        title="Partager un Avis sur un Lieu"
+        subtitle="Partagez vos impressions et recommandations pour la communauté"
       >
-        {pastPlaces.length === 0 ? (
-          <div className="space-y-4 py-2">
-            <div className="p-4 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-200 text-xs space-y-2">
-              <div className="flex items-center space-x-2 text-amber-300 font-bold text-sm">
-                <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                <span>Aucun lieu visité dans le passé trouvé</span>
+        <form onSubmit={handleCreateReview} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Sélectionner ou saisir le lieu
+            </label>
+            {pastPlaces.length > 0 ? (
+              <div className="space-y-2">
+                <select
+                  value={selectedPastPlaceKey}
+                  onChange={e => setSelectedPastPlaceKey(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                >
+                  <option value="custom">✍️ Saisie libre d'un autre lieu...</option>
+                  {pastPlaces.map(({ place, trip }) => (
+                    <option key={`${place.id}::${trip.id}`} value={`${place.id}::${trip.id}`}>
+                      {place.name} (${trip.title} &bull; ${trip.destination})
+                    </option>
+                  ))}
+                </select>
+                {(selectedPastPlaceKey === 'custom' || !selectedPastPlaceKey) && (
+                  <input
+                    type="text"
+                    required
+                    value={customPlaceName}
+                    onChange={e => setCustomPlaceName(e.target.value)}
+                    placeholder="Nom du lieu, monument ou restaurant (ex: Café des Délices, Bardo...)"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                  />
+                )}
               </div>
-              <p className="leading-relaxed">
-                Conformément à nos règles de certification, vous devez avoir réellement visité un lieu dans le cadre d'un <strong>voyage passé / terminé</strong> pour publier un avis.
-              </p>
-              <p className="leading-relaxed text-[11px] text-amber-300">
-                Astuce : Rendez-vous dans la section <strong>Voyages</strong> et cliquez sur <em>« Terminer »</em> sur l'un de vos voyages pour l'inscrire dans l'historique de vos séjours passés.
-              </p>
-            </div>
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setIsReviewModalOpen(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl"
-              >
-                Fermer
-              </button>
-            </div>
-          </div>
-        ) : (
-          <form onSubmit={handleCreateReview} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Lieu visité lors d'un séjour passé
-              </label>
-              <select
+            ) : (
+              <input
+                type="text"
                 required
-                value={selectedPastPlaceKey}
-                onChange={e => setSelectedPastPlaceKey(e.target.value)}
+                value={customPlaceName}
+                onChange={e => setCustomPlaceName(e.target.value)}
+                placeholder="Nom du lieu, monument ou restaurant (ex: Café des Délices, Bardo...)"
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
-              >
-                {pastPlaces.map(({ place, trip }) => (
-                  <option key={`${place.id}::${trip.id}`} value={`${place.id}::${trip.id}`}>
-                    {place.name} — Séjour : {trip.title} ({trip.destination})
-                  </option>
-                ))}
-              </select>
-              <span className="text-[11px] text-emerald-400 mt-1 block">
-                ✓ Lieu certifié présent dans votre historique de voyage
-              </span>
-            </div>
+              />
+            )}
+          </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Note globale ({revRating}/5 étoiles)</label>
@@ -1255,7 +1182,6 @@ export const MemoriesView: React.FC = () => {
               </button>
             </div>
           </form>
-        )}
       </Modal>
     </div>
   );

@@ -32,6 +32,7 @@ import { Modal } from '../common/Modal';
 import { api } from '../../services/api';
 import { db } from '../../db/database';
 import { useAppCurrency } from '../../utils/currency';
+import { resolveDestinationIntelligence } from '../../services/aiTripPlanner';
 import L from 'leaflet';
 import confetti from 'canvas-confetti';
 
