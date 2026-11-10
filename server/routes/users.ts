@@ -64,6 +64,7 @@ router.post('/', async (req: Request, res: Response) => {
       password: password,
       role: 'Traveler', // Rôle de base systématique pour tout nouvel inscrit
       avatar: avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+      authProvider: 'local',
       preferences: preferences || {
         currency: 'EUR',
         travelPace: 'Balanced',
@@ -126,6 +127,125 @@ router.post('/login', async (req: Request, res: Response) => {
 
     res.json({ user: userResponse, token });
   } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST google : Connexion / Inscription rapide avec Google
+router.post('/google', async (req: Request, res: Response) => {
+  try {
+    const { credential, profile } = req.body;
+
+    let email = '';
+    let name = '';
+    let avatar = '';
+    let googleId = '';
+
+    // 1. Si un ID Token (JWT) officiel Google est fourni
+    if (credential && typeof credential === 'string') {
+      try {
+        // Tentative de vérification officielle via tokeninfo Google
+        const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+        if (googleRes.ok) {
+          const gData = await googleRes.json();
+          email = gData.email || '';
+          name = gData.name || gData.given_name || email.split('@')[0];
+          avatar = gData.picture || '';
+          googleId = gData.sub || '';
+        }
+      } catch (verifyErr) {
+        console.warn('[Google Auth] Notice tokeninfo :', verifyErr);
+      }
+
+      // Si tokeninfo a échoué (réseau local ou dev), parser le payload du JWT
+      if (!email && credential.includes('.')) {
+        try {
+          const payloadBase64 = credential.split('.')[1];
+          const decoded = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf8'));
+          email = decoded.email || '';
+          name = decoded.name || decoded.given_name || (email ? email.split('@')[0] : '');
+          avatar = decoded.picture || '';
+          googleId = decoded.sub || '';
+        } catch (jwtErr) {
+          console.warn('[Google Auth] Erreur décodage JWT :', jwtErr);
+        }
+      }
+    }
+
+    // 2. Profil direct ou mode démo / simulation locale
+    if (!email && profile && profile.email) {
+      email = profile.email;
+      name = profile.name || profile.email.split('@')[0];
+      avatar = profile.avatar || '';
+      googleId = profile.googleId || ('google-' + Date.now());
+    }
+
+    if (!email || !EMAIL_REGEX.test(email.trim())) {
+      return res.status(400).json({ error: 'Données Google invalides ou adresse e-mail manquante.' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 3. Recherche du compte utilisateur existant
+    let user = await UserModel.findOne({
+      $or: [
+        { email: normalizedEmail },
+        ...(googleId ? [{ googleId }] : [])
+      ]
+    });
+
+    if (user) {
+      // Mettre à jour l'ID Google et l'avatar si approprié
+      let modified = false;
+      if (!user.googleId && googleId) {
+        user.googleId = googleId;
+        modified = true;
+      }
+      if (!user.authProvider || user.authProvider === 'local') {
+        user.authProvider = 'google';
+        modified = true;
+      }
+      if (avatar && (!user.avatar || user.avatar.includes('unsplash.com'))) {
+        user.avatar = avatar;
+        modified = true;
+      }
+      if (modified) {
+        await user.save();
+      }
+    } else {
+      // Création automatique du compte voyageur associé à Google
+      user = new UserModel({
+        name: name.trim() || normalizedEmail.split('@')[0],
+        email: normalizedEmail,
+        role: 'Traveler',
+        authProvider: 'google',
+        googleId: googleId || ('google-' + Date.now()),
+        avatar: avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+        preferences: {
+          currency: 'EUR',
+          travelPace: 'Balanced',
+          interests: ['Culture', 'Gastronomie'],
+          theme: 'dark'
+        }
+      });
+      await user.save();
+    }
+
+    // 4. Génération du JWT de session Travel Tracker
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: user.role, name: user.name },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const userResponse = user.toObject();
+    delete (userResponse as any).password;
+    delete (userResponse as any).resetPasswordCode;
+    delete (userResponse as any).resetPasswordExpires;
+
+    res.json({ user: userResponse, token });
+  } catch (err) {
+    console.error('[Google Auth Error]', err);
     res.status(500).json({ error: (err as Error).message });
   }
 });

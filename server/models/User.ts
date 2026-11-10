@@ -5,6 +5,8 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password?: string;
+  googleId?: string;
+  authProvider?: 'local' | 'google';
   role: 'Traveler' | 'Organizer' | 'Admin';
   avatar: string;
   resetPasswordCode?: string;
@@ -22,7 +24,9 @@ export interface IUser extends Document {
 const UserSchema = new Schema<IUser>({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true },
+  password: { type: String, required: false },
+  googleId: { type: String, sparse: true, default: null },
+  authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
   role: { type: String, enum: ['Traveler', 'Organizer', 'Admin'], default: 'Traveler' },
   avatar: { type: String, default: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150' },
   resetPasswordCode: { type: String, default: null },
@@ -38,9 +42,9 @@ const UserSchema = new Schema<IUser>({
 
 // Pre-save hook: Hash password before saving to MongoDB (async without next for Mongoose 8/9)
 UserSchema.pre('save', async function () {
-  if (!this.isModified('password')) return;
+  if (!this.password || !this.isModified('password')) return;
   const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password!, salt);
+  this.password = await bcrypt.hash(this.password, salt);
 });
 
 // Method to verify candidate password

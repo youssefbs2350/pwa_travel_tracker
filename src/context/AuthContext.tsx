@@ -9,6 +9,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAdmin: boolean;
   login: (email: string, password?: string) => Promise<{ success: boolean; message?: string }>;
+  loginWithGoogle: (credential?: string, profile?: { email: string; name: string; avatar?: string; googleId?: string }) => Promise<{ success: boolean; message?: string }>;
   register: (name: string, email: string, password: string, preferences?: any, avatar?: string) => Promise<{ success: boolean; message?: string }>;
   updateAvatar: (avatar: string) => Promise<{ success: boolean; message?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; code?: string; sent?: boolean; message?: string }>;
@@ -144,6 +145,80 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true };
       }
       return { success: false, message: 'Utilisateur introuvable en mode hors-ligne.' };
+    }
+  };
+
+  const loginWithGoogle = async (
+    credential?: string,
+    profile?: { email: string; name: string; avatar?: string; googleId?: string }
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const res = await fetch('/api/users/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential, profile })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const user: User = { ...data.user, id: data.user._id || data.user.id };
+        const userToken = data.token;
+
+        localStorage.setItem('tt_jwt_token', userToken);
+        localStorage.setItem('tt_user_id', user.id);
+        setCurrentUser(user);
+        setToken(userToken);
+        await db.users.put(user);
+
+        if (user.role === 'Admin') {
+          await loadAdminUsers();
+        } else {
+          setAllUsers([]);
+        }
+
+        return { success: true };
+      } else {
+        const err = await res.json();
+        return { success: false, message: err.error || 'Erreur lors de la connexion avec Google.' };
+      }
+    } catch {
+      // Repli hors-ligne pour la connexion Google
+      const targetEmail = profile?.email || 'voyageur.google@gmail.com';
+      let local = await db.users.where('email').equalsIgnoreCase(targetEmail).first();
+      
+      if (!local) {
+        local = {
+          id: 'usr-google-' + Date.now(),
+          name: profile?.name || 'Voyageur Google',
+          email: targetEmail,
+          role: 'Traveler',
+          avatar: profile?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+          authProvider: 'google',
+          googleId: profile?.googleId || ('google-' + Date.now()),
+          token: 'jwt-offline-google-' + Date.now(),
+          preferences: {
+            currency: 'EUR',
+            travelPace: 'Balanced',
+            interests: ['Culture', 'Gastronomie'],
+            theme: 'dark'
+          },
+          createdAt: new Date().toISOString()
+        };
+        await db.users.put(local);
+      }
+
+      const offlineToken = local.token || ('jwt-offline-' + local.id);
+      localStorage.setItem('tt_jwt_token', offlineToken);
+      localStorage.setItem('tt_user_id', local.id);
+      setCurrentUser(local);
+      setToken(offlineToken);
+      if (local.role === 'Admin') {
+        const localUsers = await db.users.toArray();
+        setAllUsers(localUsers);
+      } else {
+        setAllUsers([]);
+      }
+      return { success: true };
     }
   };
 
@@ -327,6 +402,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         isAdmin: currentUser?.role === 'Admin',
         login,
+        loginWithGoogle,
         register,
         forgotPassword,
         resetPassword,

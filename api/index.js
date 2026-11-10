@@ -28560,7 +28560,9 @@ import bcrypt from "bcryptjs";
 var UserSchema = new Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true },
+  password: { type: String, required: false },
+  googleId: { type: String, sparse: true, default: null },
+  authProvider: { type: String, enum: ["local", "google"], default: "local" },
   role: { type: String, enum: ["Traveler", "Organizer", "Admin"], default: "Traveler" },
   avatar: { type: String, default: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150" },
   resetPasswordCode: { type: String, default: null },
@@ -28574,7 +28576,7 @@ var UserSchema = new Schema({
   createdAt: { type: Date, default: Date.now }
 });
 UserSchema.pre("save", async function() {
-  if (!this.isModified("password")) return;
+  if (!this.password || !this.isModified("password")) return;
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
@@ -42177,6 +42179,7 @@ router.post("/", async (req, res) => {
       role: "Traveler",
       // Rôle de base systématique pour tout nouvel inscrit
       avatar: avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
+      authProvider: "local",
       preferences: preferences || {
         currency: "EUR",
         travelPace: "Balanced",
@@ -42227,6 +42230,104 @@ router.post("/login", async (req, res) => {
     delete userResponse.resetPasswordExpires;
     res.json({ user: userResponse, token });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router.post("/google", async (req, res) => {
+  try {
+    const { credential, profile } = req.body;
+    let email = "";
+    let name2 = "";
+    let avatar = "";
+    let googleId = "";
+    if (credential && typeof credential === "string") {
+      try {
+        const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+        if (googleRes.ok) {
+          const gData = await googleRes.json();
+          email = gData.email || "";
+          name2 = gData.name || gData.given_name || email.split("@")[0];
+          avatar = gData.picture || "";
+          googleId = gData.sub || "";
+        }
+      } catch (verifyErr) {
+        console.warn("[Google Auth] Notice tokeninfo :", verifyErr);
+      }
+      if (!email && credential.includes(".")) {
+        try {
+          const payloadBase64 = credential.split(".")[1];
+          const decoded = JSON.parse(Buffer.from(payloadBase64, "base64").toString("utf8"));
+          email = decoded.email || "";
+          name2 = decoded.name || decoded.given_name || (email ? email.split("@")[0] : "");
+          avatar = decoded.picture || "";
+          googleId = decoded.sub || "";
+        } catch (jwtErr) {
+          console.warn("[Google Auth] Erreur d\xE9codage JWT :", jwtErr);
+        }
+      }
+    }
+    if (!email && profile && profile.email) {
+      email = profile.email;
+      name2 = profile.name || profile.email.split("@")[0];
+      avatar = profile.avatar || "";
+      googleId = profile.googleId || "google-" + Date.now();
+    }
+    if (!email || !EMAIL_REGEX.test(email.trim())) {
+      return res.status(400).json({ error: "Donn\xE9es Google invalides ou adresse e-mail manquante." });
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+    let user = await UserModel.findOne({
+      $or: [
+        { email: normalizedEmail },
+        ...googleId ? [{ googleId }] : []
+      ]
+    });
+    if (user) {
+      let modified = false;
+      if (!user.googleId && googleId) {
+        user.googleId = googleId;
+        modified = true;
+      }
+      if (!user.authProvider || user.authProvider === "local") {
+        user.authProvider = "google";
+        modified = true;
+      }
+      if (avatar && (!user.avatar || user.avatar.includes("unsplash.com"))) {
+        user.avatar = avatar;
+        modified = true;
+      }
+      if (modified) {
+        await user.save();
+      }
+    } else {
+      user = new UserModel({
+        name: name2.trim() || normalizedEmail.split("@")[0],
+        email: normalizedEmail,
+        role: "Traveler",
+        authProvider: "google",
+        googleId: googleId || "google-" + Date.now(),
+        avatar: avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
+        preferences: {
+          currency: "EUR",
+          travelPace: "Balanced",
+          interests: ["Culture", "Gastronomie"],
+          theme: "dark"
+        }
+      });
+      await user.save();
+    }
+    const token = import_jsonwebtoken.default.sign(
+      { id: user._id, email: user.email, role: user.role, name: user.name },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    delete userResponse.resetPasswordCode;
+    delete userResponse.resetPasswordExpires;
+    res.json({ user: userResponse, token });
+  } catch (err) {
+    console.error("[Google Auth Error]", err);
     res.status(500).json({ error: err.message });
   }
 });

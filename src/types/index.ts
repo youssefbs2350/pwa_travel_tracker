@@ -7,6 +7,8 @@ export interface User {
   role: UserRole;
   avatar: string;
   token?: string;
+  googleId?: string;
+  authProvider?: 'local' | 'google';
   preferences: {
     currency: string; // EUR, USD, TND, GBP, JPY
     travelPace: 'Relaxed' | 'Balanced' | 'Intense';

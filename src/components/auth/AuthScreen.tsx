@@ -24,6 +24,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { AvatarPicker, AVATAR_PRESETS } from '../common/AvatarPicker';
+import { GoogleAuthModal, GoogleIcon } from './GoogleAuthModal';
 
 type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
 
@@ -55,7 +56,7 @@ const SHOWCASE_DESTINATIONS = [
 ];
 
 export const AuthScreen: React.FC = () => {
-  const { login, register, forgotPassword, resetPassword } = useAuth();
+  const { login, loginWithGoogle, register, forgotPassword, resetPassword } = useAuth();
   const { theme, toggleTheme } = useTheme();
   
   const [mode, setMode] = useState<AuthMode>('LOGIN');
@@ -87,10 +88,81 @@ export const AuthScreen: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
+  // Google OAuth states
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
   // Status feedback
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  // Initialize Google Identity Services SDK if Client ID is configured
+  useEffect(() => {
+    if (!googleClientId) return;
+
+    const initGsi = () => {
+      if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+        try {
+          (window as any).google.accounts.id.initialize({
+            client_id: googleClientId,
+            callback: async (response: { credential: string }) => {
+              if (response?.credential) {
+                setIsGoogleLoading(true);
+                resetMessages();
+                const res = await loginWithGoogle(response.credential);
+                if (!res.success) {
+                  setErrorMsg(res.message || 'Échec de la connexion avec Google.');
+                }
+                setIsGoogleLoading(false);
+              }
+            }
+          });
+        } catch (err) {
+          console.warn('Erreur initialisation Google Identity Services:', err);
+        }
+      }
+    };
+
+    if ((window as any).google?.accounts?.id) {
+      initGsi();
+    } else {
+      const timer = setInterval(() => {
+        if ((window as any).google?.accounts?.id) {
+          initGsi();
+          clearInterval(timer);
+        }
+      }, 400);
+      return () => clearInterval(timer);
+    }
+  }, [googleClientId]);
+
+  const handleGoogleSignInClick = () => {
+    resetMessages();
+    if (googleClientId && (window as any).google?.accounts?.id) {
+      try {
+        (window as any).google.accounts.id.prompt();
+        return;
+      } catch {
+        // Fallback to modal selector
+      }
+    }
+    setShowGoogleModal(true);
+  };
+
+  const handleSelectGoogleAccount = async (profile: { email: string; name: string; avatar?: string; googleId?: string }) => {
+    setIsGoogleLoading(true);
+    resetMessages();
+    const res = await loginWithGoogle(undefined, profile);
+    setIsGoogleLoading(false);
+    if (res.success) {
+      setShowGoogleModal(false);
+    } else {
+      setErrorMsg(res.message || 'Échec de la connexion avec Google.');
+    }
+  };
 
   const resetMessages = () => {
     setErrorMsg('');
@@ -269,7 +341,6 @@ export const AuthScreen: React.FC = () => {
             
             {/* Tagline */}
             <div className="space-y-3">
-
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight text-white">
                 Planifiez, vivez et partagez vos voyages <span className="bg-gradient-to-r from-brand-400 via-sky-300 to-amber-300 bg-clip-text text-transparent">sans friction</span>.
               </h1>
@@ -472,170 +543,212 @@ export const AuthScreen: React.FC = () => {
 
               {/* 1. LOGIN MODE */}
               {mode === 'LOGIN' && (
-                <form onSubmit={handleLoginSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Adresse Email</label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-                      <input
-                        type="email"
-                        required
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        placeholder="nom@exemple.com"
-                        className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-semibold text-slate-300">Mot de passe</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode('FORGOT_PASSWORD');
-                          resetMessages();
-                        }}
-                        className="text-[11px] text-brand-400 hover:text-brand-300 hover:underline"
-                      >
-                        Mot de passe oublié ?
-                      </button>
-                    </div>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        value={password}
-                        onChange={e => setPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-10 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(p => !p)}
-                        className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
+                <div className="space-y-4">
+                  {/* Google Sign In Button */}
                   <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-3 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold rounded-xl shadow-lg shadow-brand-500/25 flex items-center justify-center space-x-2 transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
+                    type="button"
+                    onClick={handleGoogleSignInClick}
+                    disabled={isSubmitting || isGoogleLoading}
+                    className="w-full py-2.5 px-4 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-750 hover:border-slate-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center space-x-3 transition-all duration-200 shadow-sm hover:shadow active:scale-[0.99] disabled:opacity-60"
                   >
-                    <span>{isSubmitting ? 'Contrôle de connexion...' : 'Se Connecter'}</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <GoogleIcon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                    <span>{isGoogleLoading ? 'Connexion Google en cours...' : 'Se connecter avec Google'}</span>
                   </button>
-                </form>
+
+                  {/* Separator */}
+                  <div className="relative flex items-center justify-center py-0.5">
+                    <div className="border-t border-slate-800 w-full"></div>
+                    <span className="bg-slate-900 px-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold absolute">
+                      ou par e-mail
+                    </span>
+                  </div>
+
+                  <form onSubmit={handleLoginSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Adresse Email</label>
+                      <div className="relative">
+                        <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                        <input
+                          type="email"
+                          required
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          placeholder="nom@exemple.com"
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-slate-300">Mot de passe</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMode('FORGOT_PASSWORD');
+                            resetMessages();
+                          }}
+                          className="text-[11px] text-brand-400 hover:text-brand-300 hover:underline"
+                        >
+                          Mot de passe oublié ?
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          required
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-10 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(p => !p)}
+                          className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || isGoogleLoading}
+                      className="w-full py-3 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold rounded-xl shadow-lg shadow-brand-500/25 flex items-center justify-center space-x-2 transition-all transform hover:-translate-y-0.5 disabled:opacity-50"
+                    >
+                      <span>{isSubmitting ? 'Contrôle de connexion...' : 'Se Connecter'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </form>
+                </div>
               )}
 
               {/* 2. REGISTER MODE */}
               {mode === 'REGISTER' && (
-                <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
-                  <AvatarPicker
-                    value={avatar}
-                    onChange={setAvatar}
-                    label="Avatar du voyageur (personnalisable)"
-                  />
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Prénom / Nom</label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-                      <input
-                        type="text"
-                        required
-                        value={name}
-                        onChange={e => setName(e.target.value)}
-                        placeholder="ex: Sarah"
-                        className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">Adresse Email</label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-                      <input
-                        type="email"
-                        required
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        placeholder="sarah@exemple.com"
-                        className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">Mot de passe</label>
-                      <input
-                        type="password"
-                        required
-                        value={password}
-                        onChange={e => setPassword(e.target.value)}
-                        placeholder="Min. 6 car."
-                        className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">Confirmation</label>
-                      <input
-                        type="password"
-                        required
-                        value={confirmPassword}
-                        onChange={e => setConfirmPassword(e.target.value)}
-                        placeholder="Répétez"
-                        className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">Devise Principale</label>
-                      <select
-                        value={currency}
-                        onChange={e => setCurrency(e.target.value)}
-                        className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
-                      >
-                        <option value="EUR">EUR (€)</option>
-                        <option value="USD">USD ($)</option>
-                        <option value="TND">TND (DT)</option>
-                        <option value="GBP">GBP (£)</option>
-                        <option value="JPY">JPY (¥)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">Rythme Souhaité</label>
-                      <select
-                        value={travelPace}
-                        onChange={e => setTravelPace(e.target.value as any)}
-                        className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
-                      >
-                        <option value="Relaxed">Détendu (2 act./j)</option>
-                        <option value="Balanced">Équilibré (3 act./j)</option>
-                        <option value="Intense">Intense (4 act./j)</option>
-                      </select>
-                    </div>
-                  </div>
-
+                <div className="space-y-3.5">
+                  {/* Google Sign Up Button */}
                   <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-3 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold rounded-xl shadow-lg shadow-brand-500/25 flex items-center justify-center space-x-2 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 mt-2"
+                    type="button"
+                    onClick={handleGoogleSignInClick}
+                    disabled={isSubmitting || isGoogleLoading}
+                    className="w-full py-2.5 px-4 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-750 hover:border-slate-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center space-x-3 transition-all duration-200 shadow-sm hover:shadow active:scale-[0.99] disabled:opacity-60"
                   >
-                    <span>{isSubmitting ? 'Création du compte...' : 'Créer Mon Compte'}</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <GoogleIcon className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                    <span>{isGoogleLoading ? 'Création Google en cours...' : 'S\'inscrire avec Google'}</span>
                   </button>
-                </form>
+
+                  {/* Separator */}
+                  <div className="relative flex items-center justify-center py-0.5">
+                    <div className="border-t border-slate-800 w-full"></div>
+                    <span className="bg-slate-900 px-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold absolute">
+                      ou inscription manuelle
+                    </span>
+                  </div>
+
+                  <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+                    <AvatarPicker
+                      value={avatar}
+                      onChange={setAvatar}
+                      label="Avatar du voyageur (personnalisable)"
+                    />
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Prénom / Nom</label>
+                      <div className="relative">
+                        <User className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          required
+                          value={name}
+                          onChange={e => setName(e.target.value)}
+                          placeholder="ex: Sarah"
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Adresse Email</label>
+                      <div className="relative">
+                        <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                        <input
+                          type="email"
+                          required
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          placeholder="sarah@exemple.com"
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">Mot de passe</label>
+                        <input
+                          type="password"
+                          required
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                          placeholder="Min. 6 car."
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">Confirmation</label>
+                        <input
+                          type="password"
+                          required
+                          value={confirmPassword}
+                          onChange={e => setConfirmPassword(e.target.value)}
+                          placeholder="Répétez"
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">Devise Principale</label>
+                        <select
+                          value={currency}
+                          onChange={e => setCurrency(e.target.value)}
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+                        >
+                          <option value="EUR">EUR (€)</option>
+                          <option value="USD">USD ($)</option>
+                          <option value="TND">TND (DT)</option>
+                          <option value="GBP">GBP (£)</option>
+                          <option value="JPY">JPY (¥)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">Rythme Souhaité</label>
+                        <select
+                          value={travelPace}
+                          onChange={e => setTravelPace(e.target.value as any)}
+                          className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+                        >
+                          <option value="Relaxed">Détendu (2 act./j)</option>
+                          <option value="Balanced">Équilibré (3 act./j)</option>
+                          <option value="Intense">Intense (4 act./j)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || isGoogleLoading}
+                      className="w-full py-3 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-bold rounded-xl shadow-lg shadow-brand-500/25 flex items-center justify-center space-x-2 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 mt-2"
+                    >
+                      <span>{isSubmitting ? 'Création du compte...' : 'Créer Mon Compte'}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </form>
+                </div>
               )}
 
               {/* 3. FORGOT PASSWORD MODE */}
@@ -763,6 +876,14 @@ export const AuthScreen: React.FC = () => {
 
         </div>
       </main>
+
+      {/* Google Auth Modal (Selector & Dev simulator) */}
+      <GoogleAuthModal
+        isOpen={showGoogleModal}
+        onClose={() => setShowGoogleModal(false)}
+        onSelectAccount={handleSelectGoogleAccount}
+        isSubmitting={isGoogleLoading}
+      />
 
       {/* Footer */}
       <footer className="relative z-20 border-t border-slate-900 bg-slate-950/80 py-4 text-center text-xs text-slate-500">

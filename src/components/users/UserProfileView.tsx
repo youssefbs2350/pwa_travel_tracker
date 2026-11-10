@@ -17,9 +17,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
-
-
 import { AvatarPicker, AVATAR_PRESETS } from '../common/AvatarPicker';
+import { GoogleIcon } from '../auth/GoogleAuthModal';
 
 export const UserProfileView: React.FC = () => {
   const { currentUser, updatePreferences, updateAvatar } = useAuth();
@@ -101,9 +100,17 @@ export const UserProfileView: React.FC = () => {
                   <Mail className="w-3.5 h-3.5" />
                   <span className="truncate">{currentUser?.email}</span>
                 </p>
-                <div className="inline-flex items-center space-x-1 text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                  <Shield className="w-3.5 h-3.5" />
-                  <span>Rôle : {currentUser?.role}</span>
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <div className="inline-flex items-center space-x-1 text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>Rôle : {currentUser?.role}</span>
+                  </div>
+                  {(currentUser?.authProvider === 'google' || currentUser?.googleId) && (
+                    <div className="inline-flex items-center space-x-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-sky-300 border border-slate-700">
+                      <GoogleIcon className="w-3 h-3" />
+                      <span>Google</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
