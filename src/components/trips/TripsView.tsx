@@ -463,8 +463,13 @@ export const TripsView: React.FC = () => {
   const handleAddDocSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!docsModalTrip || !newDocTitle.trim()) return;
+    const currentUserId = currentUser?.id || 'usr-default';
+    const currentUserName = currentUser?.name || 'Moi';
     const newDoc: TravelDoc = {
-      id: `doc-${Date.now()}`,
+      id: `doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      userId: currentUserId,
+      userName: currentUserName,
+      isPrivate: true,
       title: newDocTitle.trim(),
       category: newDocCategory,
       referenceCode: newDocCode.trim() || undefined,
@@ -853,10 +858,11 @@ export const TripsView: React.FC = () => {
                   {/* Open in Google Calendar */}
                   <button
                     onClick={() => handleOpenGoogleCalendar(trip)}
-                    className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-                    title="Ouvrir dans Google Calendar"
+                    className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 rounded-lg border border-blue-500/30 transition-all flex items-center space-x-1 text-[11px] font-semibold"
+                    title="Ouvrir directement dans Google Calendar sans téléchargement"
                   >
-                    <Calendar className="w-4 h-4" />
+                    <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Google Calendar</span>
                   </button>
 
                   {/* Print Roadbook */}
@@ -950,7 +956,7 @@ export const TripsView: React.FC = () => {
             />
             {/* Quick popular pills */}
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {['Djerba, Tunisie', 'Barcelone, Espagne', 'Tokyo, Japon', 'Rome, Italie', 'Marrakech, Maroc', 'Paris, France'].map(dest => (
+              {['Tunis, Tunisie', 'Djerba, Tunisie', 'Tozeur, Tunisie', 'Sousse, Tunisie', 'Hammamet, Tunisie', 'Barcelone, Espagne', 'Paris, France', 'Rome, Italie', 'Madrid, Espagne', 'Istanbul, Turquie', 'Tokyo, Japon', 'New York, États-Unis'].map(dest => (
                 <button
                   type="button"
                   key={dest}
@@ -1278,13 +1284,13 @@ export const TripsView: React.FC = () => {
           <div className="space-y-4">
             {/* Existing Documents List */}
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {(docsModalTrip.travelDocs || []).length === 0 ? (
+              {(docsModalTrip.travelDocs || []).filter(d => d.userId === (currentUser?.id || 'usr-default') || (!d.userId && docsModalTrip.userId === (currentUser?.id || 'usr-default'))).length === 0 ? (
                 <div className="text-center py-6 text-xs text-slate-500 space-y-1">
                   <FileText className="w-8 h-8 text-slate-600 mx-auto" />
                   <p>Aucun document ou bon de réservation enregistré.</p>
                 </div>
               ) : (
-                (docsModalTrip.travelDocs || []).map(doc => (
+                (docsModalTrip.travelDocs || []).filter(d => d.userId === (currentUser?.id || 'usr-default') || (!d.userId && docsModalTrip.userId === (currentUser?.id || 'usr-default'))).map(doc => (
                   <div key={doc.id} className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 flex items-center justify-between gap-3 text-xs">
                     <div className="space-y-0.5 truncate">
                       <div className="flex items-center space-x-2">
@@ -1327,7 +1333,21 @@ export const TripsView: React.FC = () => {
 
             {/* Add Document Form */}
             <form onSubmit={handleAddDocSubmit} className="pt-3 border-t border-slate-800 space-y-2.5">
-              <span className="block text-xs font-bold text-white">Ajouter un justificatif ou voucher</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedFeatureTrip(docsModalTrip);
+                  setActiveFeatureTab('vault');
+                  setShowFeaturesModal(true);
+                  setDocsModalTrip(null);
+                }}
+                className="w-full py-2 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-indigo-600/20 hover:from-indigo-600/30 hover:to-purple-600/30 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all mb-3 shadow-sm"
+              >
+                <Shield className="w-4 h-4 text-indigo-400" />
+                <span>Ouvrir mon Coffre-Fort Chiffré Personnel (AES-256)</span>
+              </button>
+
+              <span className="block text-xs font-bold text-white">Ajouter un justificatif ou voucher personnel</span>
               <div className="grid grid-cols-2 gap-2">
                 <input
                   type="text"
@@ -1721,6 +1741,7 @@ export const TripsView: React.FC = () => {
                 </p>
                 <SecureDocumentVault 
                   trip={selectedFeatureTrip} 
+                  currentUser={currentUser} 
                   onUpdateTrip={async (updates) => {
                     await updateTrip(selectedFeatureTrip.id, updates);
                     // Recharger le voyage pour refléter les changements

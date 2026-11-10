@@ -1,23 +1,17 @@
+import React from 'react';
+
 /**
- * Service de collaboration en temps réel via WebSocket
- * Permet aux participants d'un voyage de voir les actions en direct
- * 
- * MODE MOCK PAR DÉFAUT - Pour activer WebSocket réel:
- * 1. Installez: npm install socket.io-client
- * 2. Décommentez l'import Socket.io en haut
- * 3. Changez USE_MOCK_MODE à false
+ * Service de collaboration en temps réel pour les voyages
+ * Gère les messages de discussion et les participants réels par voyage
  */
-
-// import { io, Socket } from 'socket.io-client';
-
-// Configuration: true = mode mock (pas besoin de serveur), false = WebSocket réel
-const USE_MOCK_MODE = true;
 
 export interface CollaborationUser {
   id: string;
   name: string;
   avatar: string;
   color: string;
+  role?: string;
+  isOnline?: boolean;
 }
 
 export interface CollaborationEvent {
@@ -29,6 +23,7 @@ export interface CollaborationEvent {
 
 export interface CollaborationMessage {
   id: string;
+  tripId: string;
   userId: string;
   userName: string;
   userAvatar: string;
@@ -37,186 +32,134 @@ export interface CollaborationMessage {
 }
 
 class CollaborationService {
-  private socket: any = null;
   private currentTripId: string | null = null;
   private currentUser: CollaborationUser | null = null;
-  private onlineUsers: Map<string, CollaborationUser> = new Map();
   private eventCallbacks: Map<string, Function[]> = new Map();
-  private mockMessages: CollaborationMessage[] = [];
-  private mockOnlineUsers: CollaborationUser[] = [];
+  private realParticipants: CollaborationUser[] = [];
 
   /**
-   * Initialise la connexion WebSocket (ou mode mock)
+   * Initialise le service de collaboration
    */
-  connect(serverUrl: string = 'http://localhost:5000') {
-    if (USE_MOCK_MODE) {
-      console.log('[Collaboration] Running in MOCK mode (no WebSocket server needed)');
-      this.setupMockData();
-      this.trigger('connected', {});
-      return;
-    }
-
-    if (this.socket?.connected) {
-      console.warn('[Collaboration] Already connected');
-      return;
-    }
-
-    // Pour activer WebSocket réel, installez socket.io-client et décommentez:
-    // this.socket = io(serverUrl, {
-    //   transports: ['websocket'],
-    //   reconnection: true,
-    //   reconnectionDelay: 1000,
-    //   reconnectionAttempts: 5
-    // });
-
-    this.setupSocketListeners();
+  connect() {
+    this.trigger('connected', {});
   }
 
   /**
    * Déconnexion propre
    */
   disconnect() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
-    this.onlineUsers.clear();
     this.eventCallbacks.clear();
+    this.currentTripId = null;
+  }
+
+  /**
+   * Définit les participants réels du voyage
+   */
+  setTripParticipants(participants: CollaborationUser[]) {
+    this.realParticipants = participants;
+    this.trigger('online-users-updated', this.realParticipants);
+  }
+
+  /**
+   * Récupère les messages enregistrés pour un voyage donné
+   */
+  getTripMessages(tripId: string): CollaborationMessage[] {
+    try {
+      const raw = localStorage.getItem(`trip_collab_messages_${tripId}`);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+    } catch (e) {
+      console.warn('Erreur lecture messages voyage:', e);
+    }
+    return [];
+  }
+
+  /**
+   * Enregistre les messages pour un voyage
+   */
+  private saveTripMessages(tripId: string, messages: CollaborationMessage[]) {
+    try {
+      localStorage.setItem(`trip_collab_messages_${tripId}`, JSON.stringify(messages));
+    } catch (e) {
+      console.warn('Erreur sauvegarde messages voyage:', e);
+    }
   }
 
   /**
    * Rejoint un voyage pour la collaboration
    */
-  joinTrip(tripId: string, user: CollaborationUser) {
+  joinTrip(tripId: string, user: CollaborationUser, tripParticipants?: CollaborationUser[]) {
     this.currentTripId = tripId;
     this.currentUser = user;
 
-    if (USE_MOCK_MODE) {
-      // Simule des utilisateurs en ligne
-      setTimeout(() => {
-        this.trigger('online-users-updated', this.mockOnlineUsers);
-      }, 500);
-      return;
+    if (tripParticipants && tripParticipants.length > 0) {
+      this.realParticipants = tripParticipants;
     }
 
-    if (!this.socket) {
-      console.error('[Collaboration] Socket not initialized');
-      return;
-    }
-
-    this.socket.emit('join-trip', { tripId, user });
+    setTimeout(() => {
+      this.trigger('online-users-updated', this.realParticipants);
+      const history = this.getTripMessages(tripId);
+      this.trigger('chat-history', history);
+    }, 50);
   }
 
   /**
    * Quitte le voyage actuel
    */
   leaveTrip() {
-    if (!this.currentTripId) return;
-
-    if (USE_MOCK_MODE) {
-      this.currentTripId = null;
-      return;
-    }
-
-    if (!this.socket) return;
-
-    this.socket.emit('leave-trip', { tripId: this.currentTripId, userId: this.currentUser?.id });
     this.currentTripId = null;
-    this.onlineUsers.clear();
   }
 
   /**
-   * Envoie un événement de collaboration
+   * Émet un événement
    */
   emitEvent(event: Omit<CollaborationEvent, 'user' | 'timestamp'>) {
     if (!this.currentTripId || !this.currentUser) return;
 
-    if (USE_MOCK_MODE) {
-      const fullEvent: CollaborationEvent = {
-        ...event,
-        user: this.currentUser,
-        timestamp: Date.now()
-      };
-      this.trigger('event', fullEvent);
-      this.trigger(`event:${event.type}`, fullEvent);
-      return;
-    }
-
-    if (!this.socket) return;
-
-    this.socket.emit('collaboration-event', {
-      tripId: this.currentTripId,
-      event: {
-        ...event,
-        user: this.currentUser,
-        timestamp: Date.now()
-      }
-    });
+    const fullEvent: CollaborationEvent = {
+      ...event,
+      user: this.currentUser,
+      timestamp: Date.now()
+    };
+    this.trigger('event', fullEvent);
+    this.trigger(`event:${event.type}`, fullEvent);
   }
 
   /**
    * Envoie un message dans le chat du voyage
    */
-  sendMessage(message: string) {
-    if (!this.currentTripId || !this.currentUser) return;
+  sendMessage(message: string): CollaborationMessage | null {
+    if (!this.currentTripId || !this.currentUser || !message.trim()) return null;
 
     const chatMessage: CollaborationMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `msg-${this.currentTripId}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      tripId: this.currentTripId,
       userId: this.currentUser.id,
       userName: this.currentUser.name,
       userAvatar: this.currentUser.avatar,
-      message,
+      message: message.trim(),
       timestamp: Date.now()
     };
 
-    if (USE_MOCK_MODE) {
-      this.mockMessages.push(chatMessage);
-      this.trigger('chat-message', chatMessage);
-      
-      // Simule une réponse automatique
-      setTimeout(() => {
-        const mockReply: CollaborationMessage = {
-          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          userId: 'mock-user-1',
-          userName: this.mockOnlineUsers[0]?.name || 'Marie',
-          userAvatar: this.mockOnlineUsers[0]?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Marie',
-          message: this.getMockReply(message),
-          timestamp: Date.now()
-        };
-        this.trigger('chat-message', mockReply);
-      }, 1500 + Math.random() * 2000);
-      return;
-    }
+    const currentMessages = this.getTripMessages(this.currentTripId);
+    const updated = [...currentMessages, chatMessage];
+    this.saveTripMessages(this.currentTripId, updated);
 
-    if (!this.socket) return;
-
-    this.socket.emit('chat-message', {
-      tripId: this.currentTripId,
-      message: chatMessage
-    });
+    this.trigger('chat-message', chatMessage);
+    return chatMessage;
   }
 
   /**
-   * Indique que l'utilisateur est en train de taper
+   * Indique que l'utilisateur tape
    */
   emitTyping() {
     if (!this.currentTripId || !this.currentUser) return;
-
-    if (USE_MOCK_MODE) {
-      // En mode mock, on simule juste l'événement localement
-      return;
-    }
-
-    if (!this.socket) return;
-
-    this.socket.emit('user-typing', {
-      tripId: this.currentTripId,
-      user: this.currentUser
-    });
+    this.trigger('user-typing', this.currentUser);
   }
 
   /**
-   * Enregistre un callback pour un type d'événement
+   * Enregistre un callback pour un événement
    */
   on(eventType: string, callback: Function) {
     if (!this.eventCallbacks.has(eventType)) {
@@ -239,169 +182,14 @@ class CollaborationService {
   }
 
   /**
-   * Récupère la liste des utilisateurs en ligne
+   * Récupère la liste des participants
    */
   getOnlineUsers(): CollaborationUser[] {
-    if (USE_MOCK_MODE) {
-      return this.mockOnlineUsers;
-    }
-    return Array.from(this.onlineUsers.values());
+    return this.realParticipants;
   }
 
   /**
-   * Configuration des listeners Socket.IO
-   */
-  private setupSocketListeners() {
-    if (USE_MOCK_MODE || !this.socket) return;
-
-    // Connexion établie
-    this.socket.on('connect', () => {
-      console.log('[Collaboration] Connected to server');
-      this.trigger('connected', {});
-    });
-
-    // Déconnexion
-    this.socket.on('disconnect', () => {
-      console.log('[Collaboration] Disconnected from server');
-      this.onlineUsers.clear();
-      this.trigger('disconnected', {});
-    });
-
-    // Utilisateurs en ligne mis à jour
-    this.socket.on('online-users', (users: CollaborationUser[]) => {
-      this.onlineUsers.clear();
-      users.forEach(user => {
-        if (user.id !== this.currentUser?.id) {
-          this.onlineUsers.set(user.id, user);
-        }
-      });
-      this.trigger('online-users-updated', users);
-    });
-
-    // Événement de collaboration reçu
-    this.socket.on('collaboration-event', (event: CollaborationEvent) => {
-      this.trigger('event', event);
-      this.trigger(`event:${event.type}`, event);
-    });
-
-    // Message de chat reçu
-    this.socket.on('chat-message', (message: CollaborationMessage) => {
-      this.trigger('chat-message', message);
-    });
-
-    // Utilisateur en train de taper
-    this.socket.on('user-typing', (user: CollaborationUser) => {
-      this.trigger('user-typing', user);
-    });
-
-    // Erreur
-    this.socket.on('error', (error: any) => {
-      console.error('[Collaboration] Socket error:', error);
-      this.trigger('error', error);
-    });
-  }
-
-  /**
-   * Configure les données mockées pour le mode démo
-   */
-  private setupMockData() {
-    this.mockOnlineUsers = [
-      {
-        id: 'mock-user-1',
-        name: 'Marie Laurent',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Marie',
-        color: 'bg-emerald-500'
-      },
-      {
-        id: 'mock-user-2',
-        name: 'Thomas Dubois',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Thomas',
-        color: 'bg-sky-500'
-      },
-      {
-        id: 'mock-user-3',
-        name: 'Alex Martin',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex',
-        color: 'bg-amber-500'
-      }
-    ];
-
-    // Messages initiaux du chat mock
-    this.mockMessages = [
-      {
-        id: 'msg-1',
-        userId: 'mock-user-2',
-        userName: 'Thomas Dubois',
-        userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Thomas',
-        message: 'Salut ! J\'ai réservé le restaurant pour ce soir',
-        timestamp: Date.now() - 3600000
-      },
-      {
-        id: 'msg-2',
-        userId: 'mock-user-1',
-        userName: 'Marie Laurent',
-        userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Marie',
-        message: 'Super ! À quelle heure ?',
-        timestamp: Date.now() - 3300000
-      },
-      {
-        id: 'msg-3',
-        userId: 'mock-user-2',
-        userName: 'Thomas Dubois',
-        userAvatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Thomas',
-        message: '20h00. N\'oubliez pas vos passeports pour demain !',
-        timestamp: Date.now() - 3000000
-      }
-    ];
-
-    // Charge les messages initiaux
-    setTimeout(() => {
-      this.mockMessages.forEach(msg => {
-        this.trigger('chat-message', msg);
-      });
-    }, 100);
-  }
-
-  /**
-   * Génère une réponse mockée intelligente
-   */
-  private getMockReply(message: string): string {
-    const lowerMsg = message.toLowerCase();
-    
-    if (lowerMsg.includes('bonjour') || lowerMsg.includes('salut') || lowerMsg.includes('hello')) {
-      return 'Salut ! Comment ça va ? 😊';
-    }
-    if (lowerMsg.includes('restaurant') || lowerMsg.includes('manger')) {
-      return 'Bonne idée ! J\'ai vu un super resto près de l\'hôtel 🍽️';
-    }
-    if (lowerMsg.includes('heure') || lowerMsg.includes('quand')) {
-      return 'Je propose vers 19h30, ça vous va ?';
-    }
-    if (lowerMsg.includes('merci') || lowerMsg.includes('thank')) {
-      return 'De rien ! On est là pour s\'organiser ensemble 👍';
-    }
-    if (lowerMsg.includes('départ') || lowerMsg.includes('partir')) {
-      return 'N\'oubliez pas de vérifier vos passeports et billets !';
-    }
-    if (lowerMsg.includes('?')) {
-      return 'Bonne question ! Je vérifie et je te dis ça 🔍';
-    }
-    
-    // Réponses génériques
-    const genericReplies = [
-      'D\'accord, noté ! 👍',
-      'Parfait, on fait comme ça alors',
-      'Super idée ! Je suis partant',
-      'OK, on se tient au courant',
-      'Génial, merci de l\'info !',
-      'Ça marche pour moi 😊'
-    ];
-    
-    return genericReplies[Math.floor(Math.random() * genericReplies.length)];
-  }
-
-  /**
-   * Déclenche les callbacks enregistrés
+   * Déclenche les callbacks
    */
   private trigger(eventType: string, data: any) {
     const callbacks = this.eventCallbacks.get(eventType);
@@ -417,7 +205,6 @@ class CollaborationService {
   }
 }
 
-// Instance singleton
 export const collaborationService = new CollaborationService();
 
 /**
@@ -430,11 +217,9 @@ export function useCollaboration(tripId: string | null, user: CollaborationUser 
   React.useEffect(() => {
     if (!tripId || !user) return;
 
-    // Connexion
     collaborationService.connect();
     collaborationService.joinTrip(tripId, user);
 
-    // Listeners
     const handleConnected = () => setIsConnected(true);
     const handleDisconnected = () => setIsConnected(false);
     const handleUsersUpdated = (users: CollaborationUser[]) => setOnlineUsers(users);
@@ -461,6 +246,3 @@ export function useCollaboration(tripId: string | null, user: CollaborationUser 
     off: collaborationService.off.bind(collaborationService)
   };
 }
-
-// Note: Ajouter "import React from 'react';" en haut du fichier si utilisé en React
-import React from 'react';

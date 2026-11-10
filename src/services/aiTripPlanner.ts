@@ -1,4 +1,4 @@
-import { Place, Activity, Expense, Trip, PackingItem, DestinationMeta } from '../types';
+import { Trip, Place, Activity, Expense, PackingItem, DestinationMeta } from '../types';
 
 export interface AiGeneratorOptions {
   destinationQuery: string;
@@ -21,12 +21,11 @@ export interface AiGeneratedTripResult {
   expenses: Omit<Expense, 'id' | 'tripId' | 'createdAt'>[];
 }
 
-
 interface CuratedPoi {
   name: string;
   category: Place['category'];
   cost: number;
-  duration: number;
+  duration: number; // in minutes
   rating: number;
   imageUrl: string;
   address: string;
@@ -49,9 +48,96 @@ interface DestinationKnowledge {
 
 // Comprehensive Knowledge Base for instant, high-fidelity, offline-capable AI generation
 export const DESTINATIONS_DB: DestinationKnowledge[] = [
+  // --- TUNISIE ---
+  {
+    canonicalName: 'Tunis, Tunisie',
+    aliases: ['tunis', 'tounes', 'tunise', 'tuns', 'tunisia', 'tunis ville', 'sidi bou said', 'carthage', 'la goulette', 'la marsa'],
+    city: 'Tunis',
+    country: 'Tunisie',
+    lat: 36.8065,
+    lon: 10.1815,
+    coverImage: 'https://images.unsplash.com/photo-1596484552834-6a58f850e0a1?w=1200&auto=format&fit=crop&q=85',
+    meta: {
+      timezone: 'UTC+1 (Heure de Tunis)',
+      emergencyNumbers: { police: '197', ambulance: '190 / 198' },
+      plugType: 'Type C & E (230V / 50Hz)',
+      language: 'Arabe & Français',
+      currency: 'TND',
+      bestMonths: 'Mars à Juin, Septembre à Novembre'
+    },
+    insiderTips: [
+      '☕ Café des Délices (Sidi Bou Saïd) : Dégustez un thé à la menthe aux pignons avec vue plongeante sur le golfe de Tunis.',
+      '🏛️ Musée National du Bardo : Abrite la plus grande et prestigieuse collection de mosaïques romaines au monde.',
+      '🛍️ Souks de la Médina : Perdez-vous dans le Souk El Attarine (parfums) et grimpez sur la terrasse de la Maison d’Orient pour une vue panoramique sur les toits.',
+      '🥖 Fricassé & Bambalouni : Ne repartez pas sans goûter un bambalouni tout chaud à la sortie de Sidi Bou Saïd.'
+    ],
+    specialPacking: ['Chapeau de soleil', 'Lunettes de soleil', 'Chaussures de marche confortables', 'Tenue respectueuse pour la Médina', 'Monnaie liquide en dinars (TND)'],
+    curatedPois: [
+      {
+        name: 'Médina de Tunis & Mosquée Zitouna',
+        category: 'Monuments',
+        cost: 0,
+        duration: 150,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1596484552834-6a58f850e0a1?w=600&auto=format&fit=crop&q=80',
+        address: 'Rue Jamaa Ezzitouna, Médina de Tunis',
+        notes: 'Joyau classé au patrimoine mondial UNESCO avec ses ruelles voûtées et artisans traditionnels.'
+      },
+      {
+        name: 'Musée National du Bardo',
+        category: 'Monuments',
+        cost: 13,
+        duration: 120,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=600&auto=format&fit=crop&q=80',
+        address: 'Palais du Bardo, Tunis',
+        notes: 'Collection mondiale unique de mosaïques romaines et chefs-d’œuvre carthaginois.'
+      },
+      {
+        name: 'Village de Sidi Bou Saïd & Café des Délices',
+        category: 'Nature',
+        cost: 0,
+        duration: 120,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80',
+        address: 'Colline de Sidi Bou Saïd, Banlieue Nord',
+        notes: 'Maisons blanches aux portes cloutées bleues et bougainvilliers éclatants face à la Méditerranée.'
+      },
+      {
+        name: 'Site Archéologique de Carthage & Thermes d’Antonin',
+        category: 'Monuments',
+        cost: 12,
+        duration: 110,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80',
+        address: 'Rue des Thermes d’Antonin, Carthage',
+        notes: 'Vestiges grandioses de la capitale punique et romaine au bord de l’eau.'
+      },
+      {
+        name: 'Restaurant Traditionnel Dar El Jeld',
+        category: 'Restaurant',
+        cost: 35,
+        duration: 90,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
+        address: '5-10 Rue Dar El Jeld, Médina de Tunis',
+        notes: 'Haute gastronomie tunisienne dans un somptueux palais restauré.'
+      },
+      {
+        name: 'Avenue Habib Bourguiba & Théâtre Municipal',
+        category: 'Shopping',
+        cost: 0,
+        duration: 75,
+        rating: 4.6,
+        imageUrl: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&auto=format&fit=crop&q=80',
+        address: 'Avenue Habib Bourguiba, Centre-ville Tunis',
+        notes: 'Les Champs-Élysées tunisiens avec terrasses de cafés animées et architecture Art nouveau.'
+      }
+    ]
+  },
   {
     canonicalName: 'Djerba, Tunisie',
-    aliases: ['djerba', 'jerba', 'zarzis', 'houmt souk', 'djerba la douce', 'djerbahood', 'midoun', 'guellala'],
+    aliases: ['djerba', 'jerba', 'zarzis', 'houmt souk', 'djerba la douce', 'djerbahood', 'midoun', 'guellala', 'djerba tunisie'],
     city: 'Djerba',
     country: 'Tunisie',
     lat: 33.8076,
@@ -59,7 +145,7 @@ export const DESTINATIONS_DB: DestinationKnowledge[] = [
     coverImage: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=85',
     meta: {
       timezone: 'UTC+1 (Heure de Tunis)',
-      emergencyNumbers: { police: '197', ambulance: '198 / 190' },
+      emergencyNumbers: { police: '197', ambulance: '190 / 198' },
       plugType: 'Type C & E (230V / 50Hz)',
       language: 'Arabe & Français',
       currency: 'TND',
@@ -69,7 +155,7 @@ export const DESTINATIONS_DB: DestinationKnowledge[] = [
       '🎨 Djerbahood (Erriadh) : Visitez la galerie de street-art à ciel ouvert en fin d\'après-midi quand la lumière dorée sublime les façades.',
       '🐟 Criée de Houmt Souk : Achetez votre poisson frais le matin aux enchères et faites-le griller directement sur place au restaurant de la criée pour 15 TND.',
       '🏺 Ateliers de Guellala : Visitez les poteries traditionnelles troglodytes pour acheter des pièces artisanales à prix direct fabricant.',
-      '🌅 Coucher de soleil aux Flamants Roses : Balade en calèche ou bateau pirate vers la lagune pour voir les colonies d’oiseaux.'
+      '🌅 Coucher de soleil aux Flamants Roses : Balade en calèche ou bateau vers la lagune pour voir les colonies d’oiseaux.'
     ],
     specialPacking: ['Crème solaire haute protection', 'Lunettes de soleil polarisées', 'Tenue légère en lin', 'Chapeau / Casquette', 'Anti-moustique corporel'],
     curatedPois: [
@@ -136,8 +222,238 @@ export const DESTINATIONS_DB: DestinationKnowledge[] = [
     ]
   },
   {
+    canonicalName: 'Tozeur, Tunisie',
+    aliases: ['tozeur', 'tozur', 'nefta', 'chott el djerid', 'chott el jerid', 'chebika', 'tamerza', 'tozeur sud tunisien'],
+    city: 'Tozeur',
+    country: 'Tunisie',
+    lat: 33.9197,
+    lon: 8.1335,
+    coverImage: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?w=1200&auto=format&fit=crop&q=85',
+    meta: {
+      timezone: 'UTC+1 (Heure de Tunis)',
+      emergencyNumbers: { police: '197', ambulance: '190 / 198' },
+      plugType: 'Type C & E (230V / 50Hz)',
+      language: 'Arabe & Français',
+      currency: 'TND',
+      bestMonths: 'Octobre à Avril (Saison saharienne idéale)'
+    },
+    insiderTips: [
+      '🌴 Palmeraie en Calèche : Faites une balade guidée au coucher du soleil dans les 1000 hectares de palmiers nourris par les sources d’eau fossile.',
+      '🌌 Chott el-Djérid au lever du jour : Admirez les mirages et reflets cristallins de sel s\'étendant à l\'infini sur le lac salé asséché.',
+      '🎬 Décors Star Wars (Ong Jmel / Mos Espa) : Excursion 4x4 dans les dunes du Sahara pour explorer les décors originaux de Tatooine.',
+      '🍯 Dattes Deglet Nour : Achetez des dattes fraîches branchées directement chez les producteurs locaux.'
+    ],
+    specialPacking: ['Chèche / Foulard saharien', 'Lunettes de soleil de catégorie 3 ou 4', 'Chaussures de trek fermées', 'Veste chaude pour les nuits fraîches dans le désert'],
+    curatedPois: [
+      {
+        name: 'Grande Palmeraie & Oasis de Tozeur',
+        category: 'Nature',
+        cost: 10,
+        duration: 120,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?w=600&auto=format&fit=crop&q=80',
+        address: 'Oasis centrale, Route de Nefta, Tozeur',
+        notes: 'Forêt luxuriante de palmiers dattiers, grenadiers et canaux d’irrigation traditionnels.'
+      },
+      {
+        name: 'Chott el-Djérid & Cristaux de Sel',
+        category: 'Nature',
+        cost: 0,
+        duration: 90,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
+        address: 'Route GP16 reliant Tozeur à Kébili',
+        notes: 'Immense lac salé féerique célèbre pour ses mirages optiques et ses reflets roses.'
+      },
+      {
+        name: 'Décor Star Wars de Mos Espa (Ong Jmel)',
+        category: 'Monuments',
+        cost: 15,
+        duration: 120,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&auto=format&fit=crop&q=80',
+        address: 'Dunes d’Ong Jmel, Nefta',
+        notes: 'Village complet de Tatooine préservé au cœur des dunes dorées du désert.'
+      },
+      {
+        name: 'Médina Historique d’Ouled El Hadef',
+        category: 'Monuments',
+        cost: 0,
+        duration: 90,
+        rating: 4.7,
+        imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80',
+        address: 'Quartier Ouled El Hadef, Tozeur',
+        notes: 'Façades emblématiques en briques d’argile cuite disposées en motifs géométriques berbères.'
+      },
+      {
+        name: 'Oasis de Montagne de Chebika & Cascades',
+        category: 'Nature',
+        cost: 8,
+        duration: 130,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=600&auto=format&fit=crop&q=80',
+        address: 'Gorges de Chebika, Nord de Tozeur',
+        notes: 'Sources d’eau cristalline jaillissant des falaises rocailleuses avec vue saharienne.'
+      },
+      {
+        name: 'Dîner Sous Tente Bédouine & Pain de Sable',
+        category: 'Restaurant',
+        cost: 30,
+        duration: 110,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
+        address: 'Campement saharien, Tozeur',
+        notes: 'Couscous au mouton du Sud, dromadaire mijoté et dégustation du pain cuit sous les braises.'
+      }
+    ]
+  },
+  {
+    canonicalName: 'Sousse, Tunisie',
+    aliases: ['sousse', 'sous', 'soussa', 'sousse tunisie', 'port el kantaoui', 'kantaoui', 'ribat de sousse', 'boujaafar'],
+    city: 'Sousse',
+    country: 'Tunisie',
+    lat: 35.8256,
+    lon: 10.6369,
+    coverImage: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?w=1200&auto=format&fit=crop&q=85',
+    meta: {
+      timezone: 'UTC+1 (Heure de Tunis)',
+      emergencyNumbers: { police: '197', ambulance: '190 / 198' },
+      plugType: 'Type C & E (230V / 50Hz)',
+      language: 'Arabe & Français',
+      currency: 'TND',
+      bestMonths: 'Mai à Octobre'
+    },
+    insiderTips: [
+      '🏰 Ribat de Sousse : Montez au sommet de la tour de vigie pour une vue spectaculaire à 360° sur toute la baie et la Médina.',
+      '⛵ Port El Kantaoui : Baladez-vous sur les quais de la marina bordés de cafés andalous et faites une virée en catamaran.',
+      '🏛️ Musée Archéologique : Deuxième collection de mosaïques de Tunisie installée dans la superbe Kasbah.',
+      '🏖️ Plage Boujaafar : Promenade au crépuscule sur la corniche avec une glace artisanale.'
+    ],
+    specialPacking: ['Maillot de bain', 'Crème solaire', 'Chapeau', 'Chaussures légères de marche'],
+    curatedPois: [
+      {
+        name: 'Ribat Historique & Tour de Vigie',
+        category: 'Monuments',
+        cost: 8,
+        duration: 90,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?w=600&auto=format&fit=crop&q=80',
+        address: 'Place des Martyrs, Médina de Sousse',
+        notes: 'Monastère fortifié du VIIIe siècle offrant le plus beau panorama sur la côte sahélienne.'
+      },
+      {
+        name: 'Marina de Port El Kantaoui',
+        category: 'Nature',
+        cost: 0,
+        duration: 120,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
+        address: 'Port El Kantaoui, 4089 Sousse',
+        notes: 'Premier port de plaisance-jardin de la Méditerranée avec ses yachts et son architecture mauresque.'
+      },
+      {
+        name: 'Médina de Sousse & Souks Traditionnels',
+        category: 'Monuments',
+        cost: 0,
+        duration: 110,
+        rating: 4.7,
+        imageUrl: 'https://images.unsplash.com/photo-1596484552834-6a58f850e0a1?w=600&auto=format&fit=crop&q=80',
+        address: 'Centre historique de Sousse',
+        notes: 'Cité médiévale ceinte de remparts imposants classée par l’UNESCO.'
+      },
+      {
+        name: 'Musée Archéologique de la Kasbah',
+        category: 'Monuments',
+        cost: 10,
+        duration: 90,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=600&auto=format&fit=crop&q=80',
+        address: 'Kasbah de Sousse, Boulevard du Maréchal Tito',
+        notes: 'Mosaïques exceptionnelles dont le fameux Triomphe de Bacchus.'
+      },
+      {
+        name: 'Dîner Grillades de Poissons du Golfe',
+        category: 'Restaurant',
+        cost: 22,
+        duration: 90,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
+        address: 'Corniche Boujaafar, Sousse',
+        notes: 'Daurades et loups de mer grillés, salade méchouia et bricks croustillantes.'
+      }
+    ]
+  },
+  {
+    canonicalName: 'Hammamet, Tunisie',
+    aliases: ['hammamet', 'hamamet', 'yasmine hammamet', 'nabeul', 'hammamet tunisie', 'cap bon'],
+    city: 'Hammamet',
+    country: 'Tunisie',
+    lat: 36.4000,
+    lon: 10.6167,
+    coverImage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200&auto=format&fit=crop&q=85',
+    meta: {
+      timezone: 'UTC+1 (Heure de Tunis)',
+      emergencyNumbers: { police: '197', ambulance: '190 / 198' },
+      plugType: 'Type C & E (230V / 50Hz)',
+      language: 'Arabe & Français',
+      currency: 'TND',
+      bestMonths: 'Mai à Octobre'
+    },
+    insiderTips: [
+      '🏰 Fort & Kasbah d’Hammamet : Montez sur les remparts pour admirer les barques de pêcheurs colorées au pied de la forteresse.',
+      '🎭 Centre Culturel Dar Sébastian : Villa des années 1930 d’un raffinement inouï au milieu d’un immense verger d’agrumes.',
+      '⛵ Yasmine Hammamet : Profitez de la longue esplanade piétonne et de la marina animée.',
+      '🍊 Ateliers de Poterie de Nabeul : À seulement 15 minutes, découvrez la capitale tunisienne de la céramique et des fleurs d’oranger.'
+    ],
+    specialPacking: ['Tenue de plage', 'Serviette microfibre', 'Lunettes de soleil', 'Crème solaire résistante à l’eau'],
+    curatedPois: [
+      {
+        name: 'Médina d’Hammamet & Kasbah du XVe siècle',
+        category: 'Monuments',
+        cost: 7,
+        duration: 100,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1596484552834-6a58f850e0a1?w=600&auto=format&fit=crop&q=80',
+        address: 'Place des Martyrs, Médina d’Hammamet',
+        notes: 'Ruelles immaculées plongeant directement dans la mer turquoise.'
+      },
+      {
+        name: 'Centre Culturel International (Dar Sébastian)',
+        category: 'Monuments',
+        cost: 5,
+        duration: 80,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80',
+        address: 'Avenue des Nations Unies, Hammamet',
+        notes: 'Villa d’architecte iconique saluée par Frank Lloyd Wright avec théâtre de plein air.'
+      },
+      {
+        name: 'Marina & Promenade de Yasmine Hammamet',
+        category: 'Nature',
+        cost: 0,
+        duration: 110,
+        rating: 4.7,
+        imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
+        address: 'Yasmine Hammamet Sud',
+        notes: 'Port de plaisance moderne, restaurants de bord de mer et ambiance festive.'
+      },
+      {
+        name: 'Dîner Poissons & Fruits de Mer Chez Achour',
+        category: 'Restaurant',
+        cost: 28,
+        duration: 90,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
+        address: 'Rue Ali Belhouane, Hammamet',
+        notes: 'Institution culinaire réputée pour ses poissons sauvages cuits au gros sel.'
+      }
+    ]
+  },
+
+  // --- EUROPE ---
+  {
     canonicalName: 'Barcelone, Espagne',
-    aliases: ['barcelon', 'brcelon', 'barcelona', 'barca', 'catalunya', 'espagne barcelone'],
+    aliases: ['barcelone', 'barcelon', 'brcelon', 'barcelona', 'barca', 'catalunya', 'espagne barcelone'],
     city: 'Barcelone',
     country: 'Espagne',
     lat: 41.3879,
@@ -149,356 +465,76 @@ export const DESTINATIONS_DB: DestinationKnowledge[] = [
       plugType: 'Type C & F (230V / 50Hz)',
       language: 'Espagnol & Catalan',
       currency: 'EUR',
-      bestMonths: 'Mai à Octobre'
+      bestMonths: 'Avril à Juin, Septembre à Novembre'
     },
     insiderTips: [
-      '🎟️ Sagrada Família & Parc Güell : Réservez vos billets coupe-file au moins 10 jours avant pour économiser jusqu\'à 20% et garantir votre créneau.',
-      '🚇 Métro malin : Achetez le pass T-Casual (10 trajets) pour diviser vos frais de transport par deux.',
-      '🍽️ Tapas locaux : Privilégiez les ruelles de Gràcia et Poble Sec plutôt que La Rambla pour des saveurs catalanes authentiques.',
-      '🌅 Belvédère des Bunkers del Carmel : Vue panoramique à 360° sur toute la métropole et la Méditerranée au coucher du soleil (gratuit).'
+      '🎟️ Sagrada Família : Réservez au moins 3 semaines à l\'avance le créneau de 16h30 pour voir le soleil traverser les vitraux multicolores.',
+      '🍷 Tapas au Mercat del Ninot : Préférez le marché Ninot ou Santa Caterina à la Boqueria pour des tapas authentiques 40% moins chères.',
+      '🚇 Métro T-Casual : Achetez la carte T-Casual (10 trajets pour ~12€) plutôt que des tickets unitaires à 2,55€.'
     ],
-    specialPacking: ['Chaussures de marche confortables', 'Petite sacoche antivol pour le métro', 'Gourde réutilisable', 'Veste légère coupe-vent'],
+    specialPacking: ['Chaussures de marche respirantes', 'Sac à bandoulière anti-pickpockets', 'Adaptateur prise Type F'],
     curatedPois: [
       {
         name: 'Basilique de la Sagrada Família',
         category: 'Monuments',
         cost: 26,
-        duration: 120,
+        duration: 150,
         rating: 4.9,
         imageUrl: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=600&auto=format&fit=crop&q=80',
-        address: 'Carrer de Mallorca, 401, Barcelone',
-        notes: 'Le chef-d’œuvre absolu d’Antoni Gaudí avec ses vitraux féeriques.'
+        address: 'Carrer de Mallorca, 401, 08013 Barcelona',
+        notes: 'Chef-d\'œuvre absolu d\'Antoni Gaudí mêlant art nouveau et forêt de piliers organiques.'
       },
       {
         name: 'Parc Güell & Vue Panoramique',
         category: 'Nature',
         cost: 10,
+        duration: 120,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1523531294919-4bcd7c65e216?w=600&auto=format&fit=crop&q=80',
+        address: 'Gràcia, 08024 Barcelona',
+        notes: 'Jardin féerique ponctué de mosaïques multicolores (trencadís) et panorama sur la mer.'
+      },
+      {
+        name: 'Quartier Gothique (Barri Gòtic) & Cathédrale',
+        category: 'Monuments',
+        cost: 0,
         duration: 100,
         rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1564221710304-0b37c8b9d729?w=600&auto=format&fit=crop&q=80',
-        address: 'Gràcia, Barcelone',
-        notes: 'Jardins féeriques et bancs en céramique surplombant la cité.'
+        imageUrl: 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=600&auto=format&fit=crop&q=80',
+        address: 'Pla de la Seu, 08002 Barcelona',
+        notes: 'Dédale de ruelles médiévales pleines de charme, places secrètes et artistes de rue.'
       },
       {
-        name: 'Marché de la Boqueria & Bar à Tapas',
-        category: 'Restaurant',
-        cost: 18,
-        duration: 90,
-        rating: 4.7,
-        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
-        address: 'La Rambla, 91, Barcelone',
-        notes: 'Dégustation de jambon ibérique, fruits frais et pinchos minute.'
-      },
-      {
-        name: 'Quartier Gothique & Cathédrale',
-        category: 'Monuments',
-        cost: 0,
-        duration: 90,
-        rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1511527661048-7fe73d85e9a4?w=600&auto=format&fit=crop&q=80',
-        address: 'Barri Gòtic, Barcelone',
-        notes: 'Dédale de ruelles médiévales pleines de charme et d’artistes de rue.'
-      },
-      {
-        name: 'Plage de la Barceloneta & Paella au Feu de Bois',
-        category: 'Plage',
-        cost: 28,
-        duration: 120,
-        rating: 4.7,
-        imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
-        address: 'Passeig Marítim de la Barceloneta',
-        notes: 'Bord de mer, balade sur le port et paella catalane traditionnelle.'
-      },
-      {
-        name: 'Casa Batlló & Passeig de Gràcia',
-        category: 'Monuments',
-        cost: 29,
-        duration: 75,
-        rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=600&auto=format&fit=crop&q=80',
-        address: 'Passeig de Gràcia, 43, Barcelone',
-        notes: 'Façade ondulée magique rappelant le dos d’un dragon.'
-      }
-    ]
-  },
-  {
-    canonicalName: 'Tokyo, Japon',
-    aliases: ['tokyo', 'tokio', 'japon', 'shinjuku', 'shibuya', 'kyoto tokyo'],
-    city: 'Tokyo',
-    country: 'Japon',
-    lat: 35.6762,
-    lon: 139.6503,
-    coverImage: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1200&auto=format&fit=crop&q=85',
-    meta: {
-      timezone: 'UTC+9 (Heure de Tokyo)',
-      emergencyNumbers: { police: '110', ambulance: '119' },
-      plugType: 'Type A & B (100V / 50-60Hz)',
-      language: 'Japonais',
-      currency: 'JPY',
-      bestMonths: 'Mars à Mai & Octobre à Décembre'
-    },
-    insiderTips: [
-      '🚇 Tokyo Subway Ticket 72h : Métro illimité pour ~9 € (réservé aux touristes aux aéroports et grands guichets).',
-      '🗼 Belvédère de la Mairie de Tokyo (Tocho) : Vue panoramique époustouflante à 360° au 45e étage, 100% gratuite.',
-      '🍜 Ramen sur borne : Commandez vos plats authentiques sur les bornes automatiques dans les ruelles de Shinjuku pour ~6 €.',
-      '⛩️ Temple Senso-ji : Venez à 7h du matin pour profiter de la sérénité des lieux avant l\'affluence touristique.'
-    ],
-    specialPacking: ['Adaptateur prise Type A américain plat', 'Chaussures faciles à enlever pour les temples', 'Parapluie compact', 'Batterie externe puissante'],
-    curatedPois: [
-      {
-        name: 'Sanctuaire Meiji Jingu & Forêt de Yoyogi',
-        category: 'Monuments',
-        cost: 0,
-        duration: 90,
-        rating: 4.9,
-        imageUrl: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=600&auto=format&fit=crop&q=80',
-        address: '1-1 Yoyogikamizonocho, Shibuya, Tokyo',
-        notes: 'Oasis spirituelle au cœur de la mégapole ombragée par des milliers d’arbres centenaires.'
-      },
-      {
-        name: 'Carrefour de Shibuya & Hachiko',
-        category: 'Shopping',
-        cost: 0,
-        duration: 60,
-        rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=600&auto=format&fit=crop&q=80',
-        address: 'Shibuya City, Tokyo',
-        notes: 'Le passage piéton le plus animé du monde et la statue du fidèle chien Hachiko.'
-      },
-      {
-        name: 'Temple Senso-ji à Asakusa',
-        category: 'Monuments',
-        cost: 0,
-        duration: 90,
-        rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?w=600&auto=format&fit=crop&q=80',
-        address: '2-3-1 Asakusa, Taito, Tokyo',
-        notes: 'Le plus vieux temple bouddhiste de Tokyo avec son imposante lanterne rouge.'
-      },
-      {
-        name: 'Marché aux Poissons de Tsukiji & Sushis frais',
+        name: 'Dégustation Tapas & Sangria à El Born',
         category: 'Restaurant',
         cost: 22,
         duration: 90,
         rating: 4.9,
-        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
-        address: '4 Chome Tsukiji, Chuo, Tokyo',
-        notes: 'Dégustation de sashimi ultra-frais et brochettes de wagyu grillées sous vos yeux.'
-      },
-      {
-        name: 'Quartier High-Tech & Manga d’Akihabara',
-        category: 'Shopping',
-        cost: 15,
-        duration: 100,
-        rating: 4.7,
-        imageUrl: 'https://images.unsplash.com/photo-1534604973900-c43ab4c2e0ab?w=600&auto=format&fit=crop&q=80',
-        address: 'Sotokanda, Chiyoda, Tokyo',
-        notes: 'Mecque de la pop-culture japonaise, rétrogaming et néons futuristes.'
-      },
-      {
-        name: 'Belvédère Shinjuku Sky & Dîner Ramen Authentique',
-        category: 'Restaurant',
-        cost: 18,
-        duration: 110,
-        rating: 4.9,
-        imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80',
-        address: 'Nishi-Shinjuku, Tokyo',
-        notes: 'Panorama nocturne féerique et bol de ramen tonkotsu fumant dans une ruelle typique.'
-      }
-    ]
-  },
-  {
-    canonicalName: 'Rome, Italie',
-    aliases: ['rome', 'roma', 'italie rome', 'vatican'],
-    city: 'Rome',
-    country: 'Italie',
-    lat: 41.9028,
-    lon: 12.4964,
-    coverImage: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&auto=format&fit=crop&q=85',
-    meta: {
-      timezone: 'UTC+1 (Heure de Rome)',
-      emergencyNumbers: { police: '112 / 113', ambulance: '118' },
-      plugType: 'Type C, F & L (230V / 50Hz)',
-      language: 'Italien',
-      currency: 'EUR',
-      bestMonths: 'Avril à Juin & Septembre à Novembre'
-    },
-    insiderTips: [
-      '🏛️ Billet combiné Colisée + Forum : Réservez pour 08h30 pour éviter les longues files d’attente.',
-      '🍝 Quartier Trastevere : Évitez les restaurants autour du Panthéon et traversez le Tibre pour de véritables Cacio e Pepe.',
-      '💧 Fontaines Nasoni : Ne payez jamais pour de l\'eau en bouteille ! Plus de 2500 fontaines d\'eau fraîche historique sont disséminées dans la ville.',
-      '⛪ Panthéon : Entrée gratuite le premier dimanche du mois.'
-    ],
-    specialPacking: ['Chaussures confortables pour les pavés romains', 'Gourde pour les fontaines Nasoni', 'Foulard léger pour couvrir les épaules dans les églises'],
-    curatedPois: [
-      {
-        name: 'Colisée & Forum Romain',
-        category: 'Monuments',
-        cost: 18,
-        duration: 150,
-        rating: 4.9,
-        imageUrl: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=600&auto=format&fit=crop&q=80',
-        address: 'Piazza del Colosseo, Rome',
-        notes: 'Le monument emblématique de l\'Empire Romain chargé de deux millénaires d’histoire.'
-      },
-      {
-        name: 'Fontaine de Trevi & Vœu à la pièce',
-        category: 'Monuments',
-        cost: 0,
-        duration: 45,
-        rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?w=600&auto=format&fit=crop&q=80',
-        address: 'Piazza di Trevi, Rome',
-        notes: 'Chef-d’œuvre baroque sculpté au son des cascades d’eau.'
-      },
-      {
-        name: 'Panthéon de Rome & Piazza Navona',
-        category: 'Monuments',
-        cost: 5,
-        duration: 75,
-        rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1525874684015-58379d421a52?w=600&auto=format&fit=crop&q=80',
-        address: 'Piazza della Rotonda, Rome',
-        notes: 'Dôme antique parfait percé d\'un oculus ouvert vers le ciel.'
-      },
-      {
-        name: 'Trastevere : Pâtes Carbonara & Glace Artisanale',
-        category: 'Restaurant',
-        cost: 22,
-        duration: 100,
-        rating: 4.9,
-        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
-        address: 'Trastevere, Rome',
-        notes: 'Ruelles romantiques couvertes de lierre et trattorias familiales authentiques.'
-      },
-      {
-        name: 'Cité du Vatican & Basilique Saint-Pierre',
-        category: 'Monuments',
-        cost: 17,
-        duration: 150,
-        rating: 4.9,
-        imageUrl: 'https://images.unsplash.com/photo-1531572753322-ad063cecc140?w=600&auto=format&fit=crop&q=80',
-        address: 'Piazza San Pietro, Cité du Vatican',
-        notes: 'La chapelle Sixtine de Michel-Ange et le plus grand édifice chrétien au monde.'
-      },
-      {
-        name: 'Jardins de la Villa Borghèse & Belvédère du Pincio',
-        category: 'Nature',
-        cost: 0,
-        duration: 90,
-        rating: 4.7,
-        imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
-        address: 'Piazza Napoleone I, Rome',
-        notes: 'Havre de verdure surplombant la Piazza del Popolo avec les plus beaux couchers de soleil de Rome.'
-      }
-    ]
-  },
-  {
-    canonicalName: 'Marrakech, Maroc',
-    aliases: ['marrakech', 'marakech', 'marrakch', 'maroc marrakech', 'jemaa el fna'],
-    city: 'Marrakech',
-    country: 'Maroc',
-    lat: 31.6295,
-    lon: -7.9811,
-    coverImage: 'https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=1200&auto=format&fit=crop&q=85',
-    meta: {
-      timezone: 'UTC+1',
-      emergencyNumbers: { police: '190', ambulance: '150' },
-      plugType: 'Type C & E (220V)',
-      language: 'Arabe & Français',
-      currency: 'MAD',
-      bestMonths: 'Mars à Mai & Octobre à Décembre'
-    },
-    insiderTips: [
-      '🌿 Jardin Majorelle : Prenez impérativement le créneau de 08h30 en ligne pour éviter la foule.',
-      '🍵 Rooftops de la Place Jemaa el-Fna : Montez sur une terrasse vers 18h30 pour voir s\'allumer les fumées des stands culinaires.',
-      '🛍️ Négociation dans les souks : Prenez le temps d\'échanger avec le sourire et commencez par proposer la moitié du prix annoncé.',
-      '🧖 Hammam traditionnel : Expérience revigorante au savon noir et à l\'eucalyptus indispensable.'
-    ],
-    specialPacking: ['Lunettes de soleil et chapeau', 'Tenue pudique couvrant les genoux et épaules', 'Écharpe en coton contre la poussière'],
-    curatedPois: [
-      {
-        name: 'Jardin Majorelle & Musée Yves Saint Laurent',
-        category: 'Nature',
-        cost: 14,
-        duration: 90,
-        rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=600&auto=format&fit=crop&q=80',
-        address: 'Rue Yves St Laurent, Marrakech',
-        notes: 'Bleu Majorelle éclatant, cactus géants et hommage à la haute couture.'
-      },
-      {
-        name: 'Place Jemaa el-Fna & Échoppes de Rue',
-        category: 'Restaurant',
-        cost: 10,
-        duration: 90,
-        rating: 4.7,
-        imageUrl: 'https://images.unsplash.com/photo-1534604973900-c43ab4c2e0ab?w=600&auto=format&fit=crop&q=80',
-        address: 'Médina, Marrakech',
-        notes: 'Spectacle vivant permanent de musiciens, charmeurs de serpents et tajines fumants.'
-      },
-      {
-        name: 'Palais de la Bahia & Mosaïques Andalouses',
-        category: 'Monuments',
-        cost: 7,
-        duration: 75,
-        rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=600&auto=format&fit=crop&q=80',
-        address: 'Rue Riad Zitoun el Jdid, Marrakech',
-        notes: 'Patios ornés de zelliges, fontaines en marbre et plafonds en bois de cèdre sculpté.'
-      },
-      {
-        name: 'Souks de la Médina & Artisans Épices',
-        category: 'Shopping',
-        cost: 15,
-        duration: 120,
-        rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&auto=format&fit=crop&q=80',
-        address: 'Médina de Marrakech',
-        notes: 'Parfums de fleur d’oranger, travail du cuir, tapis berbères et lanternes ciselées.'
-      },
-      {
-        name: 'Dîner Tajine d’Agneau aux Pruneaux & Couscous Royal',
-        category: 'Restaurant',
-        cost: 20,
-        duration: 100,
-        rating: 4.9,
-        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
-        address: 'Riad traditionnel, Médina',
-        notes: 'Saveurs sucrées-salées d’exception au son du luth oriental.'
-      },
-      {
-        name: 'Hammam Traditionnel & Soin à l\'Argan',
-        category: 'Autre',
-        cost: 25,
-        duration: 90,
-        rating: 4.9,
-        imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80',
-        address: 'Quartier Mouassine, Marrakech',
-        notes: 'Gommage ancestral au kessa et massage décontractant aux huiles précieuses.'
+        imageUrl: 'https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=600&auto=format&fit=crop&q=80',
+        address: 'Carrer de Montcada, 08003 Barcelona',
+        notes: 'Jambon ibérique Bellota, pimientos de Padrón, patatas bravas et croquetas artisanales.'
       }
     ]
   },
   {
     canonicalName: 'Paris, France',
-    aliases: ['paris', 'france', 'paname', 'louvre', 'eiffel'],
+    aliases: ['paris', 'france', 'paname', 'louvre', 'eiffel', 'paris france'],
     city: 'Paris',
     country: 'France',
     lat: 48.8566,
     lon: 2.3522,
     coverImage: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200&auto=format&fit=crop&q=85',
     meta: {
-      timezone: 'UTC+1',
-      emergencyNumbers: { police: '112 / 17', ambulance: '112 / 15' },
-      plugType: 'Type C & E (230V)',
+      timezone: 'UTC+1 (Heure de Paris)',
+      emergencyNumbers: { police: '17 / 112', ambulance: '15 / 112' },
+      plugType: 'Type E (230V / 50Hz)',
       language: 'Français',
       currency: 'EUR',
       bestMonths: 'Avril à Octobre'
     },
     insiderTips: [
-      '🎟️ Musée du Louvre : Entrée par le centre commercial Carrousel du Louvre pour éviter la longue file de la Pyramide extérieure.',
-      '🚇 Métro : Utilisez le pass Navigo Easy pour recharger vos carnets sans tickets papier.',
-      '🥐 Boulangeries : Cherchez l\'enseigne « Artisan Boulanger » pour de vrais croissants au beurre AOP.',
+      '🎟️ Musée du Louvre : Entrez par la porte des Lions ou le Carrousel pour éviter la foule sous la Pyramide.',
+      '🚇 Métro : Utilisez le pass Navigo Easy pour recharger vos trajets sans tickets papier.',
       '🚢 Bateaux-Mouches : Croisière au crépuscule pour voir s\'illuminer la Tour Eiffel et les ponts historiques.'
     ],
     specialPacking: ['Chaussures confortables et élégantes', 'Parapluie pliant', 'Veste demi-saison'],
@@ -542,58 +578,459 @@ export const DESTINATIONS_DB: DestinationKnowledge[] = [
         imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
         address: 'Quartier Saint-Germain-des-Prés, Paris',
         notes: 'Confit de canard, bœuf bourguignon et crème brûlée croustillante.'
+      }
+    ]
+  },
+  {
+    canonicalName: 'Rome, Italie',
+    aliases: ['rome', 'roma', 'italie rome', 'vatican', 'colisee', 'rome italie'],
+    city: 'Rome',
+    country: 'Italie',
+    lat: 41.9028,
+    lon: 12.4964,
+    coverImage: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&auto=format&fit=crop&q=85',
+    meta: {
+      timezone: 'UTC+1 (Heure de Rome)',
+      emergencyNumbers: { police: '112 / 113', ambulance: '112 / 118' },
+      plugType: 'Type C, F & L (230V / 50Hz)',
+      language: 'Italien',
+      currency: 'EUR',
+      bestMonths: 'Avril à Juin, Septembre à Novembre'
+    },
+    insiderTips: [
+      '🏛️ Billet Combiné Colisée-Forum : Commencez tôt par le Forum Romain pour éviter la file interminable du Colisée.',
+      '⛲ Fontaine de Trevi : Visitez-la à 7h du matin ou après 23h pour profiter du ruissellement magique dans un calme absolu.',
+      '🍝 Trastevere : Dînez dans les trattorias typiques pour de vraies pâtes Cacio e Pepe ou Carbonara authentiques.'
+    ],
+    specialPacking: ['Chaussures fermées très confortables (pavés romains sampietrini)', 'Gourde réutilisable pour boire aux nasoni gratuits'],
+    curatedPois: [
+      {
+        name: 'Colisée & Forum Romain',
+        category: 'Monuments',
+        cost: 18,
+        duration: 180,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=600&auto=format&fit=crop&q=80',
+        address: 'Piazza del Colosseo, 1, 00184 Roma',
+        notes: 'L’amphithéâtre le plus grand de l’Empire romain et berceau de l’Antiquité.'
       },
       {
-        name: 'Île de la Cité & Cathédrale Notre-Dame',
+        name: 'Panthéon de Rome & Piazza Navona',
+        category: 'Monuments',
+        cost: 5,
+        duration: 75,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?w=600&auto=format&fit=crop&q=80',
+        address: 'Piazza della Rotonda, 00186 Roma',
+        notes: 'Dôme antique prodigieux à oculus ouvert et fontaines baroques du Bernin.'
+      },
+      {
+        name: 'Trattoria Romaine & Pâtes Artisanales',
+        category: 'Restaurant',
+        cost: 20,
+        duration: 80,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1534483509719-3feaee7c30da?w=600&auto=format&fit=crop&q=80',
+        address: 'Rione Trastevere, Roma',
+        notes: 'Spaghetti alla Carbonara aux guanciale et pecorino romano, suivis d’un tiramisu minute.'
+      }
+    ]
+  },
+  {
+    canonicalName: 'Madrid, Espagne',
+    aliases: ['madrid', 'madri', 'espagne madrid', 'prado', 'retiro'],
+    city: 'Madrid',
+    country: 'Espagne',
+    lat: 40.4168,
+    lon: -3.7038,
+    coverImage: 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=1200&auto=format&fit=crop&q=85',
+    meta: {
+      timezone: 'UTC+1',
+      emergencyNumbers: { police: '112 / 091', ambulance: '112 / 061' },
+      plugType: 'Type C & F',
+      language: 'Espagnol',
+      currency: 'EUR',
+      bestMonths: 'Avril à Juin, Septembre à Novembre'
+    },
+    insiderTips: [
+      '🖼️ Musée du Prado : Entrée gratuite du lundi au samedi de 18h à 20h.',
+      '🛶 Parc du Retiro : Louez une barque sur le grand bassin et admirez le Palais de Cristal.',
+      '🍫 Chocolaterie San Ginés : Goûtez les churros con chocolate artisanaux ouverts 24h/24.'
+    ],
+    specialPacking: ['Chaussures confortables', 'Lunettes de soleil', 'Adaptateur Type F'],
+    curatedPois: [
+      {
+        name: 'Musée National du Prado',
+        category: 'Monuments',
+        cost: 15,
+        duration: 150,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=600&auto=format&fit=crop&q=80',
+        address: 'Calle de Ruiz de Alarcón, 23, Madrid',
+        notes: 'Chefs-d’œuvre de Velázquez, Goya, El Greco et Bosch.'
+      },
+      {
+        name: 'Palais Royal de Madrid & Cathédrale de l’Almudena',
+        category: 'Monuments',
+        cost: 14,
+        duration: 120,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=600&auto=format&fit=crop&q=80',
+        address: 'Calle de Bailén, Madrid',
+        notes: 'Plus grand palais royal d’Europe occidentale entouré des jardins de Sabatini.'
+      },
+      {
+        name: 'Marché de San Miguel & Tapas Royales',
+        category: 'Restaurant',
+        cost: 24,
+        duration: 90,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
+        address: 'Plaza de San Miguel, Madrid',
+        notes: 'Marché gastronomique centenaire sous verrière d’époque en fer forgé.'
+      }
+    ]
+  },
+  {
+    canonicalName: 'Istanbul, Turquie',
+    aliases: ['istanbul', 'istambul', 'stamboul', 'turquie istanbul', 'bosphore', 'sainte sophie'],
+    city: 'Istanbul',
+    country: 'Turquie',
+    lat: 41.0082,
+    lon: 28.9784,
+    coverImage: 'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=1200&auto=format&fit=crop&q=85',
+    meta: {
+      timezone: 'UTC+3 (Heure d\'Istanbul)',
+      emergencyNumbers: { police: '155 / 112', ambulance: '112' },
+      plugType: 'Type C & F (230V / 50Hz)',
+      language: 'Turc & Anglais',
+      currency: 'TRY / EUR',
+      bestMonths: 'Avril à Juin, Septembre à Novembre'
+    },
+    insiderTips: [
+      '🕌 Sainte-Sophie & Mosquée Bleue : Visitez entre les heures de prière avec une tenue couvrant les épaules et les genoux.',
+      '🚢 Ferry Bosphore : Prenez le ferry public d’Eminönü vers Kadıköy (côté asiatique) pour 1€ avec thé turc sur le pont.',
+      '🛍️ Grand Bazar : Négociez toujours avec le sourire autour d’un thé aux pommes offert par les marchands.'
+    ],
+    specialPacking: ['Foulard pour les visites de mosquées', 'Chaussures faciles à enlever', 'Adaptateur secteur'],
+    curatedPois: [
+      {
+        name: 'Basilique Sainte-Sophie (Ayasofya)',
+        category: 'Monuments',
+        cost: 25,
+        duration: 110,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=600&auto=format&fit=crop&q=80',
+        address: 'Sultan Ahmet, Ayasofya Meydanı, Fatih/İstanbul',
+        notes: 'Chef-d’œuvre byzantin millénaire aux coupoles monumentales et marbres dorés.'
+      },
+      {
+        name: 'Palais de Topkapi & Harem Impérial',
+        category: 'Monuments',
+        cost: 30,
+        duration: 150,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80',
+        address: 'Cankurtaran, Fatih/İstanbul',
+        notes: 'Résidence des sultans ottomans surplombant la Corne d’Or et la mer de Marmara.'
+      },
+      {
+        name: 'Dîner Poissons & Mezzés au Pont de Galata',
+        category: 'Restaurant',
+        cost: 20,
+        duration: 90,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
+        address: 'Karaköy, Beyoğlu/İstanbul',
+        notes: 'Sandwich de poisson balik ekmek, mezzés frais et vue magique sur les minarets illuminés.'
+      }
+    ]
+  },
+
+  // --- MONDE ---
+  {
+    canonicalName: 'Marrakech, Maroc',
+    aliases: ['marrakech', 'marakech', 'marrakch', 'maroc marrakech', 'jemaa el fna', 'guéliz'],
+    city: 'Marrakech',
+    country: 'Maroc',
+    lat: 31.6295,
+    lon: -7.9811,
+    coverImage: 'https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=1200&auto=format&fit=crop&q=85',
+    meta: {
+      timezone: 'UTC+1',
+      emergencyNumbers: { police: '19 / 112', ambulance: '15' },
+      plugType: 'Type C & E',
+      language: 'Arabe & Français',
+      currency: 'MAD',
+      bestMonths: 'Mars à Mai, Octobre à Décembre'
+    },
+    insiderTips: [
+      '🌿 Jardin Majorelle : Réservez votre créneau en ligne 48h à l\'avance, aucune vente sur place.',
+      '🥁 Place Jemaa el-Fna : Venez à la tombée de la nuit pour le spectacle des charmeurs de serpents et conteurs.',
+      '🛁 Hammam Traditionnel : Offrez-vous un gommage au savon noir et ghassoul dans un riad.'
+    ],
+    specialPacking: ['Crème solaire', 'Chapeau', 'Chèche léger', 'Chaussures fermées pour les souks'],
+    curatedPois: [
+      {
+        name: 'Jardin Majorelle & Musée Yves Saint Laurent',
+        category: 'Nature',
+        cost: 15,
+        duration: 120,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=600&auto=format&fit=crop&q=80',
+        address: 'Rue Yves St Laurent, Marrakech',
+        notes: 'Oasis bleu cobalt créée par Jacques Majorelle puis sauvée par Yves Saint Laurent.'
+      },
+      {
+        name: 'Place Jemaa el-Fna & Souks de la Médina',
         category: 'Monuments',
         cost: 0,
-        duration: 75,
-        rating: 4.9,
-        imageUrl: 'https://images.unsplash.com/photo-1511527661048-7fe73d85e9a4?w=600&auto=format&fit=crop&q=80',
-        address: '6 Parvis Notre-Dame, 75004 Paris',
-        notes: 'Le cœur historique et spirituel de Paris au bord de la Seine.'
+        duration: 140,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=600&auto=format&fit=crop&q=80',
+        address: 'Médina de Marrakech',
+        notes: 'Théâtre à ciel ouvert inscrit au patrimoine immatériel mondial de l’UNESCO.'
       },
       {
-        name: 'Croisière Nocturne sur la Seine',
-        category: 'Nature',
-        cost: 16,
-        duration: 70,
+        name: 'Palais Bahia & Jardins Secrets',
+        category: 'Monuments',
+        cost: 7,
+        duration: 90,
         rating: 4.8,
-        imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80',
-        address: 'Pont de l\'Alma, Paris',
-        notes: 'Défilé féerique des monuments illuminés au fil de l’eau.'
+        imageUrl: 'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=600&auto=format&fit=crop&q=80',
+        address: 'Avenue Imam El Ghazali, Marrakech',
+        notes: 'Chef-d’œuvre d’architecture marocaine aux plafonds en cèdre sculpté.'
+      }
+    ]
+  },
+  {
+    canonicalName: 'Tokyo, Japon',
+    aliases: ['tokyo', 'tokio', 'japon', 'shinjuku', 'shibuya', 'kyoto tokyo', 'japon tokyo'],
+    city: 'Tokyo',
+    country: 'Japon',
+    lat: 35.6762,
+    lon: 139.6503,
+    coverImage: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1200&auto=format&fit=crop&q=85',
+    meta: {
+      timezone: 'UTC+9 (Heure de Tokyo)',
+      emergencyNumbers: { police: '110', ambulance: '119' },
+      plugType: 'Type A & B (100V / 50-60Hz)',
+      language: 'Japonais',
+      currency: 'JPY',
+      bestMonths: 'Mars à Mai (Sakura), Octobre à Novembre'
+    },
+    insiderTips: [
+      '🚇 Carte Suica / Pasmo : Indispensable pour payer les métros, trains et même boissons dans les distributeurs.',
+      '🍣 Marché de Toyosu : Arrivez tôt pour déguster des sushis d’une fraîcheur inégalée.',
+      '🗼 Shibuya Sky : Vue panoramique époustouflante sur le carrefour le plus fréquenté au monde.'
+    ],
+    specialPacking: ['Adaptateur secteur Type A', 'Pochettes plastiques pour déchets personnels', 'Chaussures faciles à retirer'],
+    curatedPois: [
+      {
+        name: 'Temple Sensō-ji d’Asakusa',
+        category: 'Monuments',
+        cost: 0,
+        duration: 120,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=600&auto=format&fit=crop&q=80',
+        address: '2 Chome-3-1 Asakusa, Taito City, Tokyo',
+        notes: 'Le plus ancien temple bouddhiste de Tokyo avec son immense lanterne rouge Kaminarimon.'
+      },
+      {
+        name: 'Carrefour de Shibuya & Sanctuaire Meiji',
+        category: 'Nature',
+        cost: 0,
+        duration: 110,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=600&auto=format&fit=crop&q=80',
+        address: 'Shibuya & Yoyogi Park, Tokyo',
+        notes: 'Contraste saisissant entre l’effervescence futuriste et la sérénité des cèdres centenaires.'
+      },
+      {
+        name: 'Expérience Ramen & Gyozas Authentiques',
+        category: 'Restaurant',
+        cost: 12,
+        duration: 60,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=600&auto=format&fit=crop&q=80',
+        address: 'Shinjuku Omoide Yokocho, Tokyo',
+        notes: 'Dégustation au comptoir d’un bouillon Tonkotsu fumant mijoté pendant 16 heures.'
+      }
+    ]
+  },
+  {
+    canonicalName: 'New York, États-Unis',
+    aliases: ['new york', 'newyork', 'nyc', 'manhattan', 'brooklyn', 'usa new york'],
+    city: 'New York',
+    country: 'États-Unis',
+    lat: 40.7128,
+    lon: -74.0060,
+    coverImage: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=1200&auto=format&fit=crop&q=85',
+    meta: {
+      timezone: 'UTC-5 (Heure de New York)',
+      emergencyNumbers: { police: '911', ambulance: '911' },
+      plugType: 'Type A & B (120V / 60Hz)',
+      language: 'Anglais',
+      currency: 'USD',
+      bestMonths: 'Avril à Juin, Septembre à Décembre'
+    },
+    insiderTips: [
+      '🗽 Ferry de Staten Island : Entièrement gratuit, il passe au plus près de la Statue de la Liberté avec vue sur Manhattan.',
+      '🌳 High Line & Central Park : Parcourez la promenade suspendue arborée construite sur d’anciennes voies ferrées.',
+      '🍕 Dollar Slice Pizza : Goûtez les parts géantes de pizza au pepperoni dans le Village.'
+    ],
+    specialPacking: ['Adaptateur prise Type A/B', 'Chaussures de marche d’excellente qualité', 'Batterie externe'],
+    curatedPois: [
+      {
+        name: 'Central Park & Belvédère Castle',
+        category: 'Nature',
+        cost: 0,
+        duration: 150,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=600&auto=format&fit=crop&q=80',
+        address: 'Central Park, Manhattan, New York',
+        notes: 'Poumon vert mythique de 340 hectares niché entre les gratte-ciel.'
+      },
+      {
+        name: 'Empire State Building & Observatoire Top of the Rock',
+        category: 'Monuments',
+        cost: 44,
+        duration: 110,
+        rating: 4.8,
+        imageUrl: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&auto=format&fit=crop&q=80',
+        address: 'Rockefeller Plaza, New York',
+        notes: 'Vue panoramique vertigineuse à 360° sur toute la skyline new-yorkaise.'
+      },
+      {
+        name: 'Traversée du Pont de Brooklyn & DUMBO',
+        category: 'Nature',
+        cost: 0,
+        duration: 90,
+        rating: 4.9,
+        imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
+        address: 'Brooklyn Bridge, New York',
+        notes: 'Promenade suspendue au-dessus de l’East River reliant Manhattan à Brooklyn.'
       }
     ]
   }
 ];
 
 /**
- * Intelligent fuzzy matching for destination queries, tolerant to misspellings
+ * Levenshtein distance between two strings
+ */
+function levenshtein(a: string, b: string): number {
+  const an = a ? a.length : 0;
+  const bn = b ? b.length : 0;
+  if (an === 0) return bn;
+  if (bn === 0) return an;
+  const matrix: number[][] = [];
+  for (let i = 0; i <= bn; ++i) matrix[i] = [i];
+  for (let i = 0; i <= an; ++i) matrix[0][i] = i;
+  for (let i = 1; i <= bn; ++i) {
+    for (let j = 1; j <= an; ++j) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1,     // insertion
+          matrix[i - 1][j] + 1      // deletion
+        );
+      }
+    }
+  }
+  return matrix[bn][an];
+}
+
+/**
+ * Normalized string similarity score between 0 and 1
+ */
+function similarityScore(str1: string, str2: string): number {
+  const s1 = (str1 || '').trim().toLowerCase();
+  const s2 = (str2 || '').trim().toLowerCase();
+  if (s1 === s2) return 1.0;
+  if (!s1 || !s2) return 0.0;
+  const maxLen = Math.max(s1.length, s2.length);
+  const dist = levenshtein(s1, s2);
+  return 1 - dist / maxLen;
+}
+
+/**
+ * Capitalize city/place names properly (e.g. "nice" -> "Nice", "sidi bou said" -> "Sidi Bou Saïd")
+ */
+function formatProperName(text: string): string {
+  if (!text) return '';
+  return text
+    .split(/[\s-]+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+/**
+ * Intelligent fuzzy matching for destination queries, tolerant to misspellings and abbreviations
  */
 export async function resolveDestinationIntelligence(query: string): Promise<DestinationKnowledge> {
-  const q = (query || '').trim().toLowerCase();
+  const raw = (query || '').trim();
+  const q = raw.toLowerCase().replace(/[,.-]/g, ' ').replace(/\s+/g, ' ').trim();
 
-  // 1. Direct and fuzzy match in curated knowledge base
+  // 1. Direct exact or token match in curated knowledge base
   for (const item of DESTINATIONS_DB) {
-    if (
-      q === item.city.toLowerCase() ||
-      q === item.canonicalName.toLowerCase() ||
-      item.aliases.some(alias => q.includes(alias) || alias.includes(q))
-    ) {
+    const cityLow = item.city.toLowerCase();
+    const canonLow = item.canonicalName.toLowerCase();
+
+    // Exact match
+    if (q === cityLow || q === canonLow) {
       return item;
+    }
+
+    // Exact alias match
+    if (item.aliases.some(alias => alias.toLowerCase() === q)) {
+      return item;
+    }
+
+    // Clean word boundary / inclusion match
+    if (q.length >= 3) {
+      if (item.aliases.some(alias => alias.toLowerCase().split(' ').includes(q) || q.split(' ').includes(alias.toLowerCase()))) {
+        return item;
+      }
     }
   }
 
-  // 2. Online Geocoding with OpenStreetMap Nominatim
+  // 2. Fuzzy Levenshtein match with tolerance for misspellings (e.g. "tuns" -> "Tunis", "tozur" -> "Tozeur")
+  let bestMatch: DestinationKnowledge | null = null;
+  let highestScore = 0;
+
+  for (const item of DESTINATIONS_DB) {
+    const cityScore = similarityScore(q, item.city);
+    if (cityScore > highestScore) {
+      highestScore = cityScore;
+      bestMatch = item;
+    }
+
+    for (const alias of item.aliases) {
+      const aliasScore = similarityScore(q, alias);
+      if (aliasScore > highestScore) {
+        highestScore = aliasScore;
+        bestMatch = item;
+      }
+    }
+  }
+
+  // If high confidence match (>= 68% similarity), return curated destination
+  if (bestMatch && highestScore >= 0.68) {
+    return bestMatch;
+  }
+
+  // 3. Online Geocoding with OpenStreetMap Nominatim (if online)
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=1`,
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(raw)}&format=json&addressdetails=1&limit=1`,
       { headers: { 'Accept-Language': 'fr,en' } }
     );
     const data = await res.json();
     if (data && data.length > 0) {
       const place = data[0];
-      const city = place.address?.city || place.address?.town || place.address?.village || place.name || query.split(',')[0].trim();
+      const city = place.address?.city || place.address?.town || place.address?.village || place.name || formatProperName(raw.split(',')[0]);
       const country = place.address?.country || 'International';
       const lat = parseFloat(place.lat);
       const lon = parseFloat(place.lon);
@@ -605,10 +1042,36 @@ export async function resolveDestinationIntelligence(query: string): Promise<Des
     console.warn('[AI Planner] Nominatim search fallback to procedural engine:', err);
   }
 
-  // 3. Fallback procedural destination
-  const cityGuess = query.split(',')[0].trim() || 'Destination Inoubliable';
-  const countryGuess = query.includes(',') ? query.split(',')[1].trim() : 'International';
-  return buildProceduralDestination(query, cityGuess, countryGuess, 41.3851, 2.1699);
+  // 4. Fallback procedural destination with realistic coordinates based on region/country
+  const parts = raw.split(',').map(p => p.trim());
+  const cityGuess = formatProperName(parts[0]) || 'Destination Inoubliable';
+  const countryGuess = parts.length > 1 ? formatProperName(parts[1]) : detectCountryFromQuery(raw);
+  const approxCoords = getEstimatedCoordinates(countryGuess, cityGuess);
+
+  const canonicalName = `${cityGuess}, ${countryGuess}`;
+  return buildProceduralDestination(canonicalName, cityGuess, countryGuess, approxCoords.lat, approxCoords.lon);
+}
+
+function detectCountryFromQuery(text: string): string {
+  const low = text.toLowerCase();
+  if (low.includes('tunis') || low.includes('djerba') || low.includes('tozeur') || low.includes('sousse') || low.includes('hammamet')) return 'Tunisie';
+  if (low.includes('franc') || low.includes('paris') || low.includes('nice') || low.includes('lyon')) return 'France';
+  if (low.includes('espagn') || low.includes('spain') || low.includes('madrid') || low.includes('barcelon')) return 'Espagne';
+  if (low.includes('itali') || low.includes('rome') || low.includes('milan') || low.includes('venis')) return 'Italie';
+  if (low.includes('maroc') || low.includes('morocco') || low.includes('marrakech')) return 'Maroc';
+  return 'International';
+}
+
+function getEstimatedCoordinates(country: string, city: string): { lat: number; lon: number } {
+  // Region-based realistic fallback coordinates instead of arbitrary Barcelona
+  const c = country.toLowerCase();
+  if (c.includes('tunisie')) return { lat: 36.8065, lon: 10.1815 }; // Tunis region
+  if (c.includes('france')) return { lat: 48.8566, lon: 2.3522 };   // France
+  if (c.includes('italie')) return { lat: 41.9028, lon: 12.4964 };  // Italie
+  if (c.includes('espagne')) return { lat: 40.4168, lon: -3.7038 }; // Espagne
+  if (c.includes('maroc')) return { lat: 31.6295, lon: -7.9811 };   // Maroc
+  if (c.includes('royaume') || c.includes('angleterre')) return { lat: 51.5074, lon: -0.1278 };
+  return { lat: 48.8566, lon: 2.3522 };
 }
 
 function buildProceduralDestination(
@@ -631,30 +1094,30 @@ function buildProceduralDestination(
       emergencyNumbers: { police: '112 / Numéro local', ambulance: '112 / Urgences' },
       plugType: 'Prise standard internationale',
       language: 'Langue officielle locale & Anglais',
-      currency: 'EUR',
+      currency: country === 'Tunisie' ? 'TND' : 'EUR',
       bestMonths: 'Printemps & Automne'
     },
     insiderTips: [
-      `🎟️ Réservations anticipées : Renseignez-vous auprès de l'office de tourisme de ${city} pour les billets combinés coupe-file.`,
-      `🍽️ Gastronomie locale : Éloignez-vous des artères principales pour goûter aux plats traditionnels prisés par les habitants.`,
-      `🚇 Mobilité douce : Privilégiez les forfaits transports à la journée ou les vélos en libre-service pour explorer les quartiers.`
+      `🎟️ Réservations anticipées : Renseignez-vous auprès de l'office de tourisme de ${city} pour les billets coupe-file.`,
+      `🍽️ Gastronomie locale : Éloignez-vous des artères principales pour goûter aux plats traditionnels authentiques.`,
+      `🚇 Mobilité douce : Privilégiez les transports locaux ou les vélos en libre-service pour explorer les quartiers.`
     ],
     specialPacking: ['Chaussures confortables de marche', 'Gourde isotherme réutilisable', 'Adaptateur de voyage universel', 'Trousse de premiers secours'],
     curatedPois: [
       {
-        name: `Centre Historique & Patrimoine de ${city}`,
+        name: `Centre Historique & Cœur Vivant de ${city}`,
         category: 'Monuments',
-        cost: 12,
+        cost: 10,
         duration: 120,
         rating: 4.8,
         imageUrl: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=600&auto=format&fit=crop&q=80',
-        address: `Cœur de ville historique, ${city}`,
+        address: `Centre historique, ${city}`,
         notes: `Découverte architecturale et histoire vivante de ${city}.`
       },
       {
         name: `Saveurs Locales & Marché Gourmand de ${city}`,
         category: 'Restaurant',
-        cost: 20,
+        cost: 18,
         duration: 90,
         rating: 4.7,
         imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
@@ -672,14 +1135,14 @@ function buildProceduralDestination(
         notes: `Vue imprenable à 360° sur toute l'agglomération.`
       },
       {
-        name: `Grand Musée d'Art & Culture de ${city}`,
+        name: `Grand Musée d'Art & Patrimoine de ${city}`,
         category: 'Monuments',
-        cost: 15,
+        cost: 14,
         duration: 110,
         rating: 4.7,
         imageUrl: 'https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=600&auto=format&fit=crop&q=80',
         address: `Quartier culturel, ${city}`,
-        notes: `Exposition des chefs-d’œuvre artistiques et trésors archéologiques.`
+        notes: `Exposition des chefs-d’œuvre artistiques et trésors de ${city}.`
       },
       {
         name: `Ruelles Commerçantes & Boutiques d’Artisans`,
@@ -688,7 +1151,7 @@ function buildProceduralDestination(
         duration: 80,
         rating: 4.6,
         imageUrl: 'https://images.unsplash.com/photo-1534604973900-c43ab4c2e0ab?w=600&auto=format&fit=crop&q=80',
-        address: `Centre piétonnier, ${city}`,
+        address: `Zone piétonne commerçante, ${city}`,
         notes: `Créations locales et souvenirs authentiques.`
       },
       {
@@ -698,7 +1161,7 @@ function buildProceduralDestination(
         duration: 100,
         rating: 4.9,
         imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80',
-        address: `Front de fleuve / Place animée, ${city}`,
+        address: `Place animée, ${city}`,
         notes: `Repas soigné dans un restaurant réputé pour sa convivialité.`
       }
     ]
@@ -737,7 +1200,7 @@ export function generateSmartPackingList(dest: DestinationKnowledge, days: numbe
     );
   }
 
-  if (theme.includes('Nature') || theme.includes('Randonnée')) {
+  if (theme.includes('Nature') || theme.includes('Randonnée') || theme.includes('Aventure')) {
     baseItems.push(
       { label: 'Chaussures de randonnée crantées', category: 'Vêtements' },
       { label: 'Gourde filtrante ou isotherme', category: 'Spécifique Destination' }
@@ -770,7 +1233,7 @@ export async function generateFullSmartTrip(options: AiGeneratorOptions): Promis
     customStartDate
   } = options;
 
-  // 1. Resolve destination intelligence
+  // 1. Resolve destination intelligence with typo tolerance & canonical normalization
   const dest = await resolveDestinationIntelligence(destinationQuery);
 
   // Dates

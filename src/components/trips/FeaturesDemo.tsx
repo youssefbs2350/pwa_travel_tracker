@@ -180,7 +180,7 @@ export const FeaturesDemo: React.FC = () => {
                 WIDGET 3/4
               </span>
             </div>
-            <SecureDocumentVault trip={trip} onUpdateTrip={handleUpdateTrip} />
+            <SecureDocumentVault trip={trip} currentUser={demoUser} onUpdateTrip={handleUpdateTrip} />
             <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800 text-xs text-slate-400">
               <strong className="text-white">Utilité :</strong> Chiffrement AES-256 pour passeports, cartes bancaires - différenciation concurrentielle
             </div>

@@ -58,6 +58,12 @@ export type TravelDocCategory = 'Vol / Billet' | 'Hôtel / Logement' | 'Assuranc
 
 export interface TravelDoc {
   id: string;
+  userId?: string;
+  userName?: string;
+  isPrivate?: boolean;
+  isSensitive?: boolean;
+  isEncrypted?: boolean;
+  encryptedData?: string;
   title: string;
   category: TravelDocCategory;
   referenceCode?: string;

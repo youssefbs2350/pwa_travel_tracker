@@ -12,67 +12,77 @@ function toIcsDateTime(dateStr: string, timeStr: string = '09:00'): string {
 }
 
 /**
- * Format a date and time for Google Calendar URL (YYYYMMDDTHHMMSS format)
+ * Format a date for all-day Google Calendar (YYYYMMDD)
  */
-function toGoogleCalendarDateTime(dateStr: string, timeStr: string = '09:00'): string {
-  return toIcsDateTime(dateStr, timeStr);
+function toGoogleCalendarDate(dateStr: string): string {
+  return dateStr.replace(/[^0-9]/g, '').slice(0, 8);
+}
+
+/**
+ * Add days to YYYY-MM-DD
+ */
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+/**
+ * Build the direct URL for Google Calendar pre-filled event without any download
+ */
+export function buildGoogleCalendarUrl(trip: Trip, activities: Activity[] = []): string {
+  const startDate = trip.startDate || new Date().toISOString().split('T')[0];
+  const endDate = trip.endDate || startDate;
+  
+  // For all-day events in Google Calendar:
+  // Format is YYYYMMDD/YYYYMMDD where end date is exclusive (+1 day)
+  const startDayFormatted = toGoogleCalendarDate(startDate);
+  const nextAfterEndFormatted = toGoogleCalendarDate(addDays(endDate, 1));
+  
+  let description = `🌍 Voyage organisé avec Travel Tracker PWA\n\n`;
+  description += `📍 Destination : ${trip.destination}, ${trip.country}\n`;
+  if (trip.participants && trip.participants.length > 0) {
+    description += `👥 Participants : ${trip.participants.join(', ')}\n`;
+  }
+  if (trip.budgetTotal) {
+    description += `💰 Budget prévisionnel : ${trip.budgetTotal} ${trip.currency}\n`;
+  }
+  if (trip.itinerarySummary) {
+    description += `\n📋 Résumé : ${trip.itinerarySummary}\n`;
+  }
+  
+  if (activities.length > 0) {
+    description += `\n📅 Programme (${activities.length} étapes) :\n`;
+    activities.forEach((act) => {
+      const timeStr = act.startTime ? ` [${act.startTime}]` : '';
+      description += `• J${act.dayNumber}${timeStr} : ${act.title}\n`;
+    });
+  }
+  
+  if (trip.notes) {
+    description += `\n💡 Astuces & Conseils :\n${trip.notes.substring(0, 500)}`;
+  }
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `✈️ ${trip.title}`,
+    dates: `${startDayFormatted}/${nextAfterEndFormatted}`,
+    details: description,
+    location: `${trip.destination}, ${trip.country}`,
+    trp: 'false'
+  });
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 /**
  * Open Google Calendar in a new tab with a pre-filled event for the trip
- * Creates a single event with the trip's start and end dates
+ * Creates a pre-filled event directly in calendar.google.com without downloading a file.
  */
-export function openInGoogleCalendar(trip: Trip, activities: Activity[]) {
-  // Use the first activity's date or trip start date
-  const startDate = activities[0]?.date || trip.startDate;
-  const startTime = activities[0]?.startTime || '09:00';
-  
-  // Use the last activity or trip end date
-  const lastActivity = activities[activities.length - 1];
-  const endDate = lastActivity?.date || trip.endDate;
-  const endTime = lastActivity?.endTime || '18:00';
-  
-  const startDateTime = toGoogleCalendarDateTime(startDate, startTime);
-  const endDateTime = toGoogleCalendarDateTime(endDate, endTime);
-  
-  // Build description with activity list
-  let description = `Voyage organisé avec Travel Tracker PWA\\n\\n`;
-  description += `🌍 Destination: ${trip.destination}, ${trip.country}\\n`;
-  description += `👥 Participants: ${trip.participants.join(', ')}\\n`;
-  description += `💰 Budget: ${trip.budgetTotal} ${trip.currency}\\n\\n`;
-  
-  if (activities.length > 0) {
-    description += `📅 Programme (${activities.length} activités):\\n\\n`;
-    activities.slice(0, 10).forEach((act, idx) => {
-      description += `• Jour ${act.dayNumber} - ${act.title}`;
-      if (act.startTime) {
-        description += ` (${act.startTime})`;
-      }
-      description += `\\n`;
-    });
-    if (activities.length > 10) {
-      description += `\\n... et ${activities.length - 10} autres activités`;
-    }
-  }
-  
-  if (trip.notes) {
-    description += `\\n\\n💡 Notes:\\n${trip.notes.substring(0, 200)}`;
-  }
-  
-  // Google Calendar URL parameters
-  const params = new URLSearchParams({
-    action: 'TEMPLATE',
-    text: trip.title,
-    dates: `${startDateTime}/${endDateTime}`,
-    details: description,
-    location: `${trip.destination}, ${trip.country}`,
-    trp: 'false' // Don't show "Busy" by default
-  });
-  
-  const googleCalendarUrl = `https://calendar.google.com/calendar/render?${params.toString()}`;
-  
-  // Open in new tab
-  window.open(googleCalendarUrl, '_blank');
+export function openInGoogleCalendar(trip: Trip, activities: Activity[] = []) {
+  const url = buildGoogleCalendarUrl(trip, activities);
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 /**
