@@ -561,6 +561,65 @@ export const api = {
 
   // MEMORIES & REVIEWS (Nourhene)
   memories: {
+    async getAll(): Promise<Memory[]> {
+      try {
+        const res = await fetch('/api/memories');
+        if (res.ok) {
+          const list = await res.json();
+          const formatted = list.map((m: any) => ({ ...m, id: m._id || m.id }));
+          await db.memories.clear();
+          await db.memories.bulkPut(formatted);
+          return formatted;
+        }
+      } catch {
+        console.log('[API] Souvenirs lus depuis IndexedDB');
+      }
+      return db.memories.toArray();
+    },
+
+    async getReviews(): Promise<Review[]> {
+      try {
+        const res = await fetch('/api/memories/reviews');
+        if (res.ok) {
+          const list = await res.json();
+          const formatted = list.map((r: any) => ({ ...r, id: r._id || r.id }));
+          await db.reviews.clear();
+          await db.reviews.bulkPut(formatted);
+          return formatted;
+        }
+      } catch {
+        console.log('[API] Avis lus depuis IndexedDB');
+      }
+      return db.reviews.toArray();
+    },
+
+    async createReview(review: Omit<Review, 'id' | 'createdAt'>): Promise<Review> {
+      const tempId = 'rev-' + Date.now();
+      const localRev: Review = {
+        ...review,
+        id: tempId
+      };
+
+      try {
+        const res = await fetch('/api/memories/reviews', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(review)
+        });
+        if (res.ok) {
+          const created = await res.json();
+          const finalRev = { ...created, id: created._id || created.id };
+          await db.reviews.put(finalRev);
+          return finalRev;
+        }
+      } catch {
+        console.log('[API] Avis sauvegardé hors-ligne');
+      }
+
+      await db.reviews.put(localRev);
+      return localRev;
+    },
+
     async getByTrip(tripId: string): Promise<Memory[]> {
       try {
         const res = await fetch(`/api/memories?tripId=${tripId}`);

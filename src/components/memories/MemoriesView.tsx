@@ -111,11 +111,11 @@ export const MemoriesView: React.FC = () => {
     }
     
     // All saved memories across all trips for gallery review
-    const allMems = await db.memories.toArray();
+    const allMems = await api.memories.getAll();
     setAllSavedMemories(allMems);
 
     // All reviews
-    const revs = await db.reviews.toArray();
+    const revs = await api.memories.getReviews();
     setReviews(revs);
 
     // Charger tous les lieux disponibles pour donner un avis librement
@@ -284,7 +284,7 @@ export const MemoriesView: React.FC = () => {
       verifiedVisit: true
     };
 
-    await db.reviews.add(newRev);
+    await api.memories.createReview(newRev);
     await loadData();
     setIsReviewModalOpen(false);
     setRevComment('');

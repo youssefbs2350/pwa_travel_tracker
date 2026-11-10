@@ -440,7 +440,7 @@ export const PlacesView: React.FC = () => {
       verifiedVisit: true
     };
 
-    await db.reviews.add(newRev);
+    await api.memories.createReview(newRev);
     alert(`Merci ! Votre avis certifié sur « ${placeForReview.name} » a été enregistré.`);
     setIsReviewModalOpen(false);
     setRevComment('');
