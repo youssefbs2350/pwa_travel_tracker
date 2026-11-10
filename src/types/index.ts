@@ -1,5 +1,28 @@
 export type UserRole = 'Traveler' | 'Organizer' | 'Admin';
 
+export interface EmergencyContact {
+  name: string;
+  phone: string;
+}
+
+export interface EmergencyInfo {
+  bloodType?: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-' | '';
+  allergies?: string;
+  emergencyContact?: EmergencyContact;
+}
+
+export type BadgeId = 'first_flight' | 'explorer' | 'budget_master' | 'globetrotter' | 'memory_keeper' | 'all_terrain';
+
+export interface TravelerBadge {
+  id: BadgeId;
+  label: string;
+  description: string;
+  icon: string;
+  unlocked: boolean;
+  progress?: number;    // 0-100
+  progressLabel?: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -9,6 +32,7 @@ export interface User {
   token?: string;
   googleId?: string;
   authProvider?: 'local' | 'google';
+  emergencyInfo?: EmergencyInfo;
   preferences: {
     currency: string; // EUR, USD, TND, GBP, JPY
     travelPace: 'Relaxed' | 'Balanced' | 'Intense';
