@@ -17,6 +17,11 @@ export interface AIPredictionResult {
   explanation: string;
   recommendedAction: string;
   isCritical: boolean;
+  suggestedCompensation: string;
+  compensationExplanation: string;
+  detectedAmount?: number;
+  currency?: string;
+  isFinancialEmergency?: boolean;
 }
 
 // ─── Semantic Dictionaries ──────────────────────────────────────────────────
@@ -138,15 +143,15 @@ const CATEGORY_RULES: Record<ComplaintCategory, TermRule[]> = {
     { term: 'valise perdue', weight: 15 },
     { term: 'bagage égaré', weight: 14 },
     { term: 'perte de bagage', weight: 14 },
+    { term: 'bagage retardé', weight: 12 },
     { term: 'bagage endommagé', weight: 12 },
     { term: 'valise cassée', weight: 12 },
-    { term: 'vol dans la valise', weight: 14 },
-    { term: 'serrure forcée', weight: 11 },
-    { term: 'retard bagage', weight: 11 },
-    { term: 'tapis à bagages', weight: 8 },
-    { term: 'livraison de bagage', weight: 8 },
-    { term: 'soute', weight: 7 },
-    { term: 'bagage cabine', weight: 6 },
+    { term: 'fermeture éclair cassée', weight: 8 },
+    { term: 'roulette cassée', weight: 8 },
+    { term: 'contenu volé', weight: 14 },
+    { term: 'vol dans bagage', weight: 14 },
+    { term: 'tapis bagage', weight: 6 },
+    { term: 'livraison bagage', weight: 8 },
     { term: 'valise', weight: 7 },
     { term: 'bagage', weight: 7 },
     { term: 'sac à dos', weight: 6 },
@@ -155,26 +160,37 @@ const CATEGORY_RULES: Record<ComplaintCategory, TermRule[]> = {
   ],
 
   'Frais imprévu': [
-    { term: 'double débit', weight: 14 },
-    { term: 'débité deux fois', weight: 14 },
-    { term: 'surfacturation', weight: 12 },
-    { term: 'frais cachés', weight: 11 },
-    { term: 'frais imprévus', weight: 10 },
-    { term: 'frais abusifs', weight: 11 },
-    { term: 'caution non restituée', weight: 13 },
-    { term: 'caution volée', weight: 13 },
-    { term: 'escroquerie', weight: 12 },
-    { term: 'arnaque financière', weight: 12 },
-    { term: 'supplément injustifié', weight: 10 },
-    { term: 'taxe de séjour abusive', weight: 8 },
-    { term: 'commission bancaire', weight: 7 },
-    { term: 'taux de change frauduleux', weight: 9 },
-    { term: 'pourboire forcé', weight: 7 },
+    { term: 'enlèvement d\'un montant', weight: 16 },
+    { term: 'enlèvement', weight: 13 },
+    { term: 'prélèvement frauduleux', weight: 16 },
+    { term: 'prélèvement non autorisé', weight: 16 },
+    { term: 'prélèvement abusif', weight: 14 },
+    { term: 'débité sans accord', weight: 16 },
+    { term: 'débit frauduleux', weight: 16 },
+    { term: 'double débit', weight: 15 },
+    { term: 'débité deux fois', weight: 15 },
+    { term: 'surfacturation', weight: 14 },
+    { term: 'frais cachés', weight: 12 },
+    { term: 'frais imprévus', weight: 11 },
+    { term: 'frais abusifs', weight: 13 },
+    { term: 'caution non restituée', weight: 15 },
+    { term: 'caution volée', weight: 15 },
+    { term: 'caution débitée', weight: 14 },
+    { term: 'caution prélevée', weight: 14 },
+    { term: 'escroquerie', weight: 14 },
+    { term: 'arnaque financière', weight: 14 },
+    { term: 'supplément injustifié', weight: 11 },
+    { term: 'taxe de séjour abusive', weight: 9 },
+    { term: 'commission bancaire', weight: 8 },
+    { term: 'taux de change frauduleux', weight: 10 },
+    { term: 'pourboire forcé', weight: 8 },
     { term: 'facture', weight: 6 },
-    { term: 'surcoût', weight: 8 },
-    { term: 'remboursement refusé', weight: 9 },
-    { term: 'carte bancaire débitée', weight: 9 },
-    { term: 'prélèvement inconnu', weight: 10 }
+    { term: 'surcoût', weight: 9 },
+    { term: 'remboursement refusé', weight: 11 },
+    { term: 'carte bancaire débitée', weight: 11 },
+    { term: 'prélèvement inconnu', weight: 13 },
+    { term: 'carte piratée', weight: 15 },
+    { term: 'vol d\'argent', weight: 15 }
   ],
 
   'Autre': [
@@ -194,7 +210,7 @@ interface UrgencyTrigger {
 }
 
 const URGENCY_TRIGGERS: UrgencyTrigger[] = [
-  // Niveau Critique / Vital / Sécurité immédiate
+  // Niveau Critique / Vital / Sécurité immédiate / Fraude majeure
   { term: 'urgence', points: 40, isCritical: true },
   { term: 'urgent', points: 30, isCritical: true },
   { term: 'danger', points: 40, isCritical: true },
@@ -219,6 +235,24 @@ const URGENCY_TRIGGERS: UrgencyTrigger[] = [
   { term: 'dehors la nuit', points: 40, isCritical: true },
   { term: 'expulsé', points: 40, isCritical: true },
 
+  // Détection financière critique : enlèvement d'argent, débits frauduleux
+  { term: 'enlèvement d\'un montant', points: 45, isCritical: true },
+  { term: 'enlèvement de', points: 35, isCritical: true },
+  { term: 'enlèvement', points: 28 },
+  { term: 'débité sans accord', points: 45, isCritical: true },
+  { term: 'prélèvement frauduleux', points: 45, isCritical: true },
+  { term: 'retrait frauduleux', points: 45, isCritical: true },
+  { term: 'carte piratée', points: 45, isCritical: true },
+  { term: 'escroquerie', points: 32, isCritical: true },
+  { term: 'vol d\'argent', points: 40, isCritical: true },
+  { term: 'caution non restituée', points: 28 },
+  { term: 'caution prélevée', points: 30 },
+  { term: 'caution débitée', points: 30 },
+  { term: 'prélèvement abusif', points: 28 },
+  { term: 'somme importante', points: 30 },
+  { term: 'montant important', points: 30 },
+  { term: 'surfacturation abusive', points: 26 },
+
   // Urgence Haute (logistique bloquante, préjudice financier fort)
   { term: 'vol annulé', points: 30 },
   { term: 'bagage perdu', points: 30 },
@@ -228,14 +262,12 @@ const URGENCY_TRIGGERS: UrgencyTrigger[] = [
   { term: 'insalubre', points: 25 },
   { term: 'volé', points: 28 },
   { term: 'vol de', points: 25 },
-  { term: 'escroquerie', points: 25 },
-  { term: 'arnaque', points: 22 },
-  { term: 'remboursement immédiat', points: 22 },
+  { term: 'arnaque', points: 24 },
+  { term: 'remboursement immédiat', points: 24 },
   { term: 'bloqué', points: 20 },
   { term: 'coincé', points: 20 },
   { term: 'surbooking', points: 24 },
-  { term: 'double débit', points: 22 },
-  { term: 'caution non restituée', points: 20 },
+  { term: 'double débit', points: 24 },
 
   // Urgence Moyenne (inconfort, retards, prestations non honorées)
   { term: 'retard', points: 15 },
@@ -261,6 +293,211 @@ const URGENCY_TRIGGERS: UrgencyTrigger[] = [
   { term: 'wifi', points: 5 }
 ];
 
+// ─── Financial Extraction & Analysis ────────────────────────────────────────
+
+export interface FinancialAssessment {
+  detectedAmount?: number;
+  currency: string;
+  isImportantAmount: boolean;
+  isUnauthorizedCharge: boolean;
+  rawMention?: string;
+}
+
+export function extractFinancialImpact(text: string): FinancialAssessment {
+  const normalized = text.toLowerCase();
+
+  // Keywords indicating unauthorized debit / unexpected removal
+  const unauthorizedKeywords = [
+    'enlèvement', 'enlevé', 'débité', 'débit', 'prélèvement', 'prélevé',
+    'retrait', 'retiré', 'caution', 'escroquerie', 'arnaque', 'surfacturation',
+    'double débit', 'frais abusifs', 'vol d\'argent', 'somme retirée',
+    'carte piratée', 'fraude', 'sans mon accord', 'sans autorisation', 'prélevée', 'débitée'
+  ];
+
+  const isUnauthorizedCharge = unauthorizedKeywords.some(kw => normalized.includes(kw));
+
+  // Regex for extracting amount and currency: 850€, 1200 EUR, 1 500 euros, 500$, 800 TND, 2500 dinars
+  const amountRegex = /(\b\d+(?:[\s.,]\d{3})*(?:[.,]\d{1,2})?)\s*(€|eur|euros?|tnd|dinars?|\$|usd|gbp|£)/i;
+  const reverseRegex = /(€|\$|£)\s*(\b\d+(?:[\s.,]\d{3})*(?:[.,]\d{1,2})?)/i;
+
+  let amount: number | undefined;
+  let currency = 'EUR';
+  let rawMention: string | undefined;
+
+  const match = normalized.match(amountRegex);
+  if (match) {
+    const rawNum = match[1].replace(/\s+/g, '').replace(',', '.');
+    const parsed = parseFloat(rawNum);
+    if (!isNaN(parsed) && parsed > 0) {
+      amount = parsed;
+      const curr = match[2].toUpperCase();
+      if (curr.includes('TND') || curr.includes('DINAR')) currency = 'TND';
+      else if (curr.includes('$') || curr.includes('USD')) currency = 'USD';
+      else if (curr.includes('£') || curr.includes('GBP')) currency = 'GBP';
+      else currency = 'EUR';
+      rawMention = match[0];
+    }
+  } else {
+    const revMatch = normalized.match(reverseRegex);
+    if (revMatch) {
+      const rawNum = revMatch[2].replace(/\s+/g, '').replace(',', '.');
+      const parsed = parseFloat(rawNum);
+      if (!isNaN(parsed) && parsed > 0) {
+        amount = parsed;
+        const curr = revMatch[1];
+        if (curr === '$') currency = 'USD';
+        else if (curr === '£') currency = 'GBP';
+        else currency = 'EUR';
+        rawMention = revMatch[0];
+      }
+    }
+  }
+
+  // Threshold: >= 200 is important, >= 500 is major/critical
+  const isImportantAmount = (amount !== undefined && amount >= 200) ||
+    normalized.includes('montant important') ||
+    normalized.includes('somme importante') ||
+    normalized.includes('somme énorme');
+
+  return {
+    detectedAmount: amount,
+    currency,
+    isImportantAmount,
+    isUnauthorizedCharge,
+    rawMention
+  };
+}
+
+// ─── AI Compensation Prediction ─────────────────────────────────────────────
+
+function computePredictedCompensation(
+  category: ComplaintCategory,
+  priority: ComplaintPriority,
+  fullText: string,
+  fin: FinancialAssessment
+): { suggestedCompensation: string; compensationExplanation: string } {
+  // 1. Direct explicit amount identified (financial damage)
+  if (fin.detectedAmount && fin.detectedAmount > 0) {
+    const amt = fin.detectedAmount;
+    const cur = fin.currency;
+
+    if (fin.isUnauthorizedCharge || category === 'Frais imprévu') {
+      if (priority === 'Urgente' || amt >= 500) {
+        const bonus = Math.round(amt * 0.15);
+        return {
+          suggestedCompensation: `${amt} ${cur} (Remboursement intégral immédiat + ${bonus} ${cur} dédommagement préjudice)`,
+          compensationExplanation: `L'IA a identifié un enlèvement ou débit bancaire direct de ${amt} ${cur}. Compte tenu de la criticité Urgente, un remboursement intégral immédiat sous 48h majoré de 15% pour préjudice financier est recommandé.`
+        };
+      }
+      return {
+        suggestedCompensation: `${amt} ${cur} (Remboursement intégral du montant contesté)`,
+        compensationExplanation: `Montant exact du préjudice financier identifié : ${amt} ${cur}. Remboursement intégral préconisé sur présentation du justificatif ou relevé bancaire.`
+      };
+    }
+
+    if (category === 'Bagage') {
+      const capped = Math.min(amt, 1300);
+      return {
+        suggestedCompensation: `${capped} ${cur} (Indemnisation valeur déclarée / Convention de Montréal)`,
+        compensationExplanation: `Estimation basée sur la valeur déclarée de vos effets (${amt} ${cur}) dans la limite du plafond légal international des transporteurs (1 288 DTS, env. 1 300 €).`
+      };
+    }
+
+    if (category === 'Hôtel / Logement') {
+      return {
+        suggestedCompensation: `${amt} ${cur} (Remboursement hébergement + relogement pris en charge)`,
+        compensationExplanation: `Montant d'hébergement litigieux de ${amt} ${cur} : annulation sans frais et remboursement complet des nuitées contestées.`
+      };
+    }
+
+    return {
+      suggestedCompensation: `${amt} ${cur} (Indemnisation équivalente au montant subi)`,
+      compensationExplanation: `Prise en charge intégrale de la dépense ou du préjudice de ${amt} ${cur}.`
+    };
+  }
+
+  // 2. No explicit amount: contextual prediction based on legal frameworks and urgency
+  switch (category) {
+    case 'Transport / Vol':
+      if (fullText.includes('annulé') || fullText.includes('refus d\'embarquement') || fullText.includes('surbooking')) {
+        return {
+          suggestedCompensation: '400 EUR (Indemnité forfaitaire légale UE 261/2004 + Billet alternatif)',
+          compensationExplanation: 'Le règlement européen CE 261/2004 accorde une indemnité forfaitaire automatique de 250 € à 600 € selon la distance du vol en cas d\'annulation ou refus d\'embarquement.'
+        };
+      }
+      if (fullText.includes('retard')) {
+        return {
+          suggestedCompensation: '250 EUR à 400 EUR (Indemnisation forfaitaire retard supérieur à 3h)',
+          compensationExplanation: 'Pour tout retard à l\'arrivée dépassant 3 heures, la compagnie aérienne est légalement tenue d\'indemniser entre 250 € et 400 €.'
+        };
+      }
+      return {
+        suggestedCompensation: priority === 'Urgente' ? '350 EUR (Assistance et dédommagement prioritaire)' : '180 EUR',
+        compensationExplanation: `Indemnisation estimée par l'IA pour préjudice de transport de sévérité ${priority}.`
+      };
+
+    case 'Hôtel / Logement':
+      if (fullText.includes('punaises') || fullText.includes('insalubre') || priority === 'Urgente') {
+        return {
+          suggestedCompensation: '100% remboursement de la réservation + Relogement d\'urgence & 100 EUR bon voyage',
+          compensationExplanation: 'Condition sanitaire ou de sécurité intenable : remboursement intégral de l\'hébergement et indemnisation du trouble de jouissance.'
+        };
+      }
+      if (priority === 'Haute') {
+        return {
+          suggestedCompensation: 'Remboursement 50% à 100% de la première nuitée + bon de 50 EUR',
+          compensationExplanation: 'Désagrément majeur d\'équipement ou de conformité de chambre.'
+        };
+      }
+      return {
+        suggestedCompensation: '50 EUR en bon d\'achat séjour ou remboursement partiel',
+        compensationExplanation: 'Compensation forfaitaire pour désagrément de confort léger.'
+      };
+
+    case 'Bagage':
+      if (fullText.includes('perdu') || fullText.includes('volé')) {
+        return {
+          suggestedCompensation: 'Jusqu\'à 1 300 EUR (Convention de Montréal) + 120 EUR achats de première nécessité',
+          compensationExplanation: 'Plafond légal international de la Convention de Montréal pour perte ou destruction de bagage enregistré.'
+        };
+      }
+      return {
+        suggestedCompensation: '120 EUR à 200 EUR (Remboursement de valise ou frais de dépannage)',
+        compensationExplanation: 'Dédommagement pour bagage retardé ou coque endommagée au déchargement.'
+      };
+
+    case 'Activité / Guide':
+      return {
+        suggestedCompensation: 'Remboursement 100% de l\'excursion + 40 EUR bon d\'activité',
+        compensationExplanation: 'Annulation ou non-conformité de la prestation touristique payée d\'avance.'
+      };
+
+    case 'Frais imprévu':
+      return {
+        suggestedCompensation: priority === 'Urgente' ? '300 EUR (Remboursement d\'urgence du débit)' : '120 EUR',
+        compensationExplanation: 'Prise en charge du surcoût, de la caution bloquée ou des frais bancaires injustifiés.'
+      };
+
+    default:
+      if (priority === 'Urgente') {
+        return {
+          suggestedCompensation: '300 EUR (Prise en charge d\'urgence prioritaire)',
+          compensationExplanation: 'Compensation recommandée pour dossier critique.'
+        };
+      }
+      if (priority === 'Haute') {
+        return {
+          suggestedCompensation: '150 EUR (Dédommagement préjudice direct)',
+          compensationExplanation: 'Compensation adaptée à un litige à fort impact.'
+        };
+      }
+      return {
+        suggestedCompensation: '50 EUR en bon de réduction voyage',
+        compensationExplanation: 'Geste commercial pour signalement de qualité.'
+      };
+  }
+}
+
 // ─── Main AI Prediction Function ────────────────────────────────────────────
 
 export function predictComplaintWithAI(
@@ -271,6 +508,9 @@ export function predictComplaintWithAI(
   const fullText = `${title || ''} ${description || ''}`.toLowerCase().trim();
   const detectedKeywords: string[] = [];
 
+  // Financial assessment
+  const fin = extractFinancialImpact(fullText);
+
   if (fullText.length < 3) {
     return {
       category: 'Transport / Vol',
@@ -278,9 +518,11 @@ export function predictComplaintWithAI(
       confidence: 40,
       urgencyScore: 25,
       detectedKeywords: [],
-      explanation: 'Saisissez le titre ou la description de l\'incident pour activer l\'analyse automatique.',
+      explanation: 'Saisissez le motif ou la description de l\'incident pour activer l\'analyse prédictive.',
       recommendedAction: 'Décrivez précisément les faits survenus, la date et les préjudices constatés.',
-      isCritical: false
+      isCritical: false,
+      suggestedCompensation: '150 EUR',
+      compensationExplanation: 'Estimation standard en attente de détails sur le litige.'
     };
   }
 
@@ -305,8 +547,12 @@ export function predictComplaintWithAI(
     }
   }
 
-  // Find winner category
-  let bestCategory: ComplaintCategory = 'Transport / Vol';
+  // If unauthorized charge / financial withdrawal is found, prioritize 'Frais imprévu'
+  if (fin.isUnauthorizedCharge || (fin.detectedAmount && fin.detectedAmount > 0 && !categoryScores['Transport / Vol'] && !categoryScores['Hôtel / Logement'] && !categoryScores['Bagage'])) {
+    categoryScores['Frais imprévu'] += 25;
+  }
+
+  let bestCategory: ComplaintCategory = 'Autre';
   let highestScore = 0;
 
   for (const [cat, score] of Object.entries(categoryScores) as [ComplaintCategory, number][]) {
@@ -316,17 +562,8 @@ export function predictComplaintWithAI(
     }
   }
 
-  // If score is 0, check fallback hints
   if (highestScore === 0) {
-    if (fullText.includes('billet') || fullText.includes('gare') || fullText.includes('trajet')) {
-      bestCategory = 'Transport / Vol';
-    } else if (fullText.includes('nuit') || fullText.includes('dormir') || fullText.includes('séjour')) {
-      bestCategory = 'Hôtel / Logement';
-    } else if (fullText.includes('euro') || fullText.includes('argent') || fullText.includes('payé')) {
-      bestCategory = 'Frais imprévu';
-    } else {
-      bestCategory = 'Autre';
-    }
+    bestCategory = 'Transport / Vol';
   }
 
   // 2. Calculate Urgency Score
@@ -345,10 +582,26 @@ export function predictComplaintWithAI(
     }
   }
 
-  // Boost urgency if amount requested is high (> 300)
-  if (/\b([3-9]\d{2}|\d{4,})\s*(€|\$|eur|tnd)/i.test(fullText)) {
-    urgencyPoints += 15;
-    detectedKeywords.push('montant financier élevé');
+  // Critical Financial Assessment : Important amount removal / unauthorized debit
+  let isFinancialEmergency = false;
+  if (fin.isImportantAmount || fin.isUnauthorizedCharge) {
+    if (fin.detectedAmount && fin.detectedAmount >= 500) {
+      urgencyPoints += 50;
+      isCritical = true;
+      isFinancialEmergency = true;
+      detectedKeywords.unshift(`enlèvement important (${fin.detectedAmount} ${fin.currency})`);
+    } else if (fin.detectedAmount && fin.detectedAmount >= 200) {
+      urgencyPoints += 35;
+      if (fin.isUnauthorizedCharge) {
+        isCritical = true;
+        isFinancialEmergency = true;
+      }
+      detectedKeywords.unshift(`débit contesté (${fin.detectedAmount} ${fin.currency})`);
+    } else if (fin.isUnauthorizedCharge) {
+      urgencyPoints += 30;
+      isFinancialEmergency = true;
+      detectedKeywords.unshift('enlèvement / prélèvement indu');
+    }
   }
 
   // Normalize urgency score between 0 and 100
@@ -367,47 +620,60 @@ export function predictComplaintWithAI(
 
   // 3. Compute Confidence Score
   const keywordCount = detectedKeywords.length;
-  let confidence = Math.min(98, 55 + (keywordCount * 9) + (highestScore > 15 ? 15 : highestScore));
-  if (fullText.length > 50 && keywordCount >= 2) confidence = Math.max(confidence, 85);
+  let confidence = Math.min(98, 55 + (keywordCount * 8) + (highestScore > 15 ? 15 : highestScore));
+  if (fullText.length > 50 && keywordCount >= 2) confidence = Math.max(confidence, 88);
 
-  // 4. Generate Meaningful Explanation and Action Recommendations
+  // 4. Compute AI Predicted Compensation
+  const { suggestedCompensation, compensationExplanation } = computePredictedCompensation(
+    bestCategory,
+    priority,
+    fullText,
+    fin
+  );
+
+  // 5. Generate Meaningful Explanation and Action Recommendations
   let explanation = '';
   let recommendedAction = '';
 
-  switch (bestCategory) {
-    case 'Transport / Vol':
-      explanation = priority === 'Urgente'
-        ? `Alerte IA Transport Critique : Incident majeur avec blocage logistique ou annulation immédiate (${detectedKeywords.slice(0, 3).join(', ')}). Priorité Urgente requise.`
-        : `L'IA a identifié un préjudice de transport aérien ou ferroviaire (${detectedKeywords.slice(0, 3).join(', ')}). Priorité qualifiée en ${priority}.`;
-      recommendedAction = 'Conservez vos cartes d\'embarquement, billets et attestations de retard délivrées par le transporteur pour l\'indemnisation forfaitaire (règlement UE 261/2004 si applicable).';
-      break;
+  if (isFinancialEmergency) {
+    explanation = `Alerte Financière IA Critique : L'IA a détecté un enlèvement ou débit bancaire significatif${fin.detectedAmount ? ` de ${fin.detectedAmount} ${fin.currency}` : ''} sans accord. Qualification immédiate en Priorité Urgente pour déclencher le blocage bancaire et la procédure de rétrofacturation (chargeback).`;
+    recommendedAction = 'Contactez immédiatement votre établissement bancaire pour faire opposition ou contester l\'opération, et joignez ici une capture d\'écran du débit sur votre relevé pour obtenir le remboursement intégral.';
+  } else {
+    switch (bestCategory) {
+      case 'Transport / Vol':
+        explanation = priority === 'Urgente'
+          ? `Alerte IA Transport Critique : Incident majeur avec blocage logistique ou annulation immédiate (${detectedKeywords.slice(0, 3).join(', ')}). Priorité Urgente requise.`
+          : `L'IA a identifié un préjudice de transport aérien ou ferroviaire (${detectedKeywords.slice(0, 3).join(', ')}). Priorité qualifiée en ${priority}.`;
+        recommendedAction = 'Conservez vos cartes d\'embarquement, billets et attestations de retard délivrées par le transporteur pour l\'indemnisation forfaitaire (règlement UE 261/2004 si applicable).';
+        break;
 
-    case 'Hôtel / Logement':
-      explanation = priority === 'Urgente' || priority === 'Haute'
-        ? `L'IA détecte une défaillance d'hébergement sévère ou sanitaire (${detectedKeywords.slice(0, 3).join(', ')}). Nécessite un relogement ou dédommagement rapide.`
-        : `Désagrément lié à la qualité ou conformité du logement (${detectedKeywords.slice(0, 3).join(', ')}).`;
-      recommendedAction = 'Prenez des photos et vidéos horodatées des lieux et demandez immédiatement une trace écrite à la réception avant tout arbitrage.';
-      break;
+      case 'Hôtel / Logement':
+        explanation = priority === 'Urgente' || priority === 'Haute'
+          ? `L'IA détecte une défaillance d'hébergement sévère ou sanitaire (${detectedKeywords.slice(0, 3).join(', ')}). Nécessite un relogement ou dédommagement rapide.`
+          : `Désagrément lié à la qualité ou conformité du logement (${detectedKeywords.slice(0, 3).join(', ')}).`;
+        recommendedAction = 'Prenez des photos et vidéos horodatées des lieux et demandez immédiatement une trace écrite à la réception avant tout arbitrage.';
+        break;
 
-    case 'Bagage':
-      explanation = `Détection Bagagerie : Incident survenu lors du transport ou de la livraison de vos effets (${detectedKeywords.slice(0, 3).join(', ')}). Urgence évaluée à ${priority}.`;
-      recommendedAction = 'Déposez obligatoirement un constat d\'irrégularité (PIR) au guichet bagages de l\'aéroport et conservez vos reçus d\'achats de première nécessité.';
-      break;
+      case 'Bagage':
+        explanation = `Détection Bagagerie : Incident survenu lors du transport ou de la livraison de vos effets (${detectedKeywords.slice(0, 3).join(', ')}). Urgence évaluée à ${priority}.`;
+        recommendedAction = 'Déposez obligatoirement un constat d\'irrégularité (PIR) au guichet bagages de l\'aéroport et conservez vos reçus d\'achats de première nécessité.';
+        break;
 
-    case 'Activité / Guide':
-      explanation = `Analyse IA Excursion : Activité programmée non conforme, annulée ou guide non présent (${detectedKeywords.slice(0, 3).join(', ')}).`;
-      recommendedAction = 'Joignez vos vouchers d\'activité et capture d\'écran des échanges pour obtenir le remboursement intégral de la prestation.';
-      break;
+      case 'Activité / Guide':
+        explanation = `Analyse IA Excursion : Activité programmée non conforme, annulée ou guide non présent (${detectedKeywords.slice(0, 3).join(', ')}).`;
+        recommendedAction = 'Joignez vos vouchers d\'activité et capture d\'écran des échanges pour obtenir le remboursement intégral de la prestation.';
+        break;
 
-    case 'Frais imprévu':
-      explanation = `Analyse Financière IA : Débit contesté, caution ou surfacturation anormale (${detectedKeywords.slice(0, 3).join(', ')}). Sévérité ${priority}.`;
-      recommendedAction = 'Fournissez un extrait de compte bancaire ou reçu justificatif montrant le montant exact du préjudice financier.';
-      break;
+      case 'Frais imprévu':
+        explanation = `Analyse Financière IA : Débit contesté, caution ou surfacturation anormale (${detectedKeywords.slice(0, 3).join(', ')}). Sévérité ${priority}.`;
+        recommendedAction = 'Fournissez un extrait de compte bancaire ou reçu justificatif montrant le montant exact du préjudice financier.';
+        break;
 
-    default:
-      explanation = `L'IA a catégorisé la réclamation en "${bestCategory}" avec un niveau de priorité "${priority}".`;
-      recommendedAction = 'Complétez les détails chronologiques pour accélérer la résolution de votre dossier.';
-      break;
+      default:
+        explanation = `L'IA a catégorisé la réclamation en "${bestCategory}" avec un niveau de priorité "${priority}".`;
+        recommendedAction = 'Complétez les détails chronologiques pour accélérer la résolution de votre dossier.';
+        break;
+    }
   }
 
   return {
@@ -418,6 +684,11 @@ export function predictComplaintWithAI(
     detectedKeywords: detectedKeywords.slice(0, 6),
     explanation,
     recommendedAction,
-    isCritical
+    isCritical,
+    suggestedCompensation,
+    compensationExplanation,
+    detectedAmount: fin.detectedAmount,
+    currency: fin.currency,
+    isFinancialEmergency
   };
 }

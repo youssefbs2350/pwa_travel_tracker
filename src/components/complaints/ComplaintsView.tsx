@@ -25,7 +25,8 @@ import {
   ArrowRight,
   UserCheck,
   FolderOpen,
-  Inbox
+  Inbox,
+  Coins
 } from 'lucide-react';
 
 import { useTrips } from '../../context/TripContext';
@@ -61,6 +62,7 @@ export const ComplaintsView: React.FC = () => {
   const [aiPrediction, setAiPrediction] = useState<AIPredictionResult | null>(null);
   const [isManualCategory, setIsManualCategory] = useState(false);
   const [isManualPriority, setIsManualPriority] = useState(false);
+  const [isManualCompensation, setIsManualCompensation] = useState(false);
 
   // Status Notification Toast / Banner (Email notification feedback)
   const [statusNotification, setStatusNotification] = useState<{
@@ -86,19 +88,27 @@ export const ComplaintsView: React.FC = () => {
       if (!isManualPriority) {
         setPriority(pred.priority);
       }
+      // Auto-assign predicted compensation based on criticality & financial impact
+      if (!isManualCompensation && pred.suggestedCompensation) {
+        setRequestedCompensation(pred.suggestedCompensation);
+      }
     } else {
       setAiPrediction(null);
     }
-  }, [title, description, isManualCategory, isManualPriority]);
+  }, [title, description, isManualCategory, isManualPriority, isManualCompensation]);
 
   // Reset manual overrides and revert to AI predictions
   const handleResetToAIPrediction = () => {
     if (aiPrediction) {
       setCategory(aiPrediction.category);
       setPriority(aiPrediction.priority);
+      if (aiPrediction.suggestedCompensation) {
+        setRequestedCompensation(aiPrediction.suggestedCompensation);
+      }
     }
     setIsManualCategory(false);
     setIsManualPriority(false);
+    setIsManualCompensation(false);
   };
 
   const loadComplaints = async () => {
@@ -146,6 +156,7 @@ export const ComplaintsView: React.FC = () => {
     setDescription('');
     setIsManualCategory(false);
     setIsManualPriority(false);
+    setIsManualCompensation(false);
     setAiPrediction(null);
   };
 
@@ -781,6 +792,7 @@ export const ComplaintsView: React.FC = () => {
           setIsAddModalOpen(false);
           setIsManualCategory(false);
           setIsManualPriority(false);
+          setIsManualCompensation(false);
           setAiPrediction(null);
         }}
         title="Déposer une Réclamation"
@@ -859,10 +871,34 @@ export const ComplaintsView: React.FC = () => {
                 </div>
               </div>
 
-              {aiPrediction.isCritical && (
+              {aiPrediction.isFinancialEmergency ? (
+                <div className="p-2.5 rounded-lg bg-rose-500/25 border border-rose-500/50 text-[11px] text-rose-200 font-bold flex items-center space-x-2 animate-pulse">
+                  <ShieldAlert className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                  <span>
+                    Alerte Financière Critique : Enlèvement ou débit bancaire majeur détecté${aiPrediction.detectedAmount ? ` (${aiPrediction.detectedAmount} ${aiPrediction.currency})` : ''} &rarr; Priorité Urgente activée !
+                  </span>
+                </div>
+              ) : aiPrediction.isCritical ? (
                 <div className="p-2 rounded-lg bg-rose-500/20 border border-rose-500/40 text-[11px] text-rose-200 font-semibold flex items-center space-x-1.5">
                   <ShieldAlert className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
                   <span>Alerte Critique : incident majeur lié à la sécurité, santé ou blocage immédiat.</span>
+                </div>
+              ) : null}
+
+              {aiPrediction.suggestedCompensation && (
+                <div className="p-2.5 rounded-lg bg-emerald-950/50 border border-emerald-500/40 text-xs space-y-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-bold text-emerald-300 flex items-center space-x-1.5">
+                      <Coins className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Compensation suggérée par l'IA :</span>
+                    </span>
+                    <span className="font-extrabold text-white text-[11px] bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">
+                      {aiPrediction.suggestedCompensation}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-emerald-200/80 leading-relaxed">
+                    {aiPrediction.compensationExplanation}
+                  </p>
                 </div>
               )}
 
@@ -888,7 +924,7 @@ export const ComplaintsView: React.FC = () => {
                 </div>
               )}
 
-              {(isManualCategory || isManualPriority) && (
+              {(isManualCategory || isManualPriority || isManualCompensation) && (
                 <div className="flex items-center justify-between pt-1 border-t border-slate-800/80 text-[11px]">
                   <span className="text-slate-400">Valeurs modifiées manuellement</span>
                   <button
@@ -967,11 +1003,22 @@ export const ComplaintsView: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Dédommagement ou compensation souhaitée</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-slate-300">Dédommagement ou compensation souhaitée</label>
+              {aiPrediction && !isManualCompensation && (
+                <span className="text-[9px] text-emerald-400 font-bold flex items-center space-x-0.5">
+                  <Check className="w-2.5 h-2.5" />
+                  <span>Prédit par l'IA selon criticité</span>
+                </span>
+              )}
+            </div>
             <input
               type="text"
               value={requestedCompensation}
-              onChange={e => setRequestedCompensation(e.target.value)}
+              onChange={e => {
+                setRequestedCompensation(e.target.value);
+                setIsManualCompensation(true);
+              }}
               placeholder="ex: Remboursement 180 EUR, nuitée ou bon d'achat"
               className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
             />
