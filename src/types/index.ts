@@ -175,6 +175,7 @@ export interface Complaint {
   id: string;
   tripId: string;
   userId: string;
+  userEmail?: string;
   userName: string;
   title: string;
   category: 'Transport / Vol' | 'Hôtel / Logement' | 'Activité / Guide' | 'Frais imprévu' | 'Bagage' | 'Autre';

@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IComplaint extends Document {
   tripId: string;
   userId: string;
+  userEmail?: string;
   userName: string;
   title: string;
   category: 'Transport / Vol' | 'Hôtel / Logement' | 'Activité / Guide' | 'Frais imprévu' | 'Bagage' | 'Autre';
@@ -20,6 +21,7 @@ export interface IComplaint extends Document {
 const ComplaintSchema = new Schema<IComplaint>({
   tripId: { type: String, required: true, index: true },
   userId: { type: String, required: true },
+  userEmail: { type: String, default: '' },
   userName: { type: String, default: 'Voyageur' },
   title: { type: String, required: true },
   category: { 

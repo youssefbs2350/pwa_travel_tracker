@@ -689,14 +689,18 @@ export const api = {
       return localComp;
     },
 
-    async update(id: string, updates: Partial<Complaint>): Promise<void> {
+    async update(id: string, updates: Partial<Complaint>): Promise<any> {
       await db.complaints.update(id, updates);
       try {
-        await fetch(`/api/complaints/${id}`, {
+        const res = await fetch(`/api/complaints/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updates)
         });
+        if (res.ok) {
+          const data = await res.json();
+          return data;
+        }
       } catch {
         await db.syncQueue.add({
           type: 'UPDATE',
@@ -705,6 +709,7 @@ export const api = {
           timestamp: new Date().toISOString()
         });
       }
+      return null;
     },
 
     async delete(id: string): Promise<void> {

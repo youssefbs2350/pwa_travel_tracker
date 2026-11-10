@@ -14,7 +14,13 @@ import {
   ShieldCheck,
   Send,
   Sparkles,
-  Lock
+  Lock,
+  Mail,
+  Bot,
+  Zap,
+  Check,
+  RotateCcw,
+  Info
 } from 'lucide-react';
 
 import { useTrips } from '../../context/TripContext';
@@ -22,6 +28,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Complaint, ComplaintPriority, ComplaintStatus } from '../../types';
 import { Modal } from '../common/Modal';
 import { api } from '../../services/api';
+import { predictComplaintWithAI, AIPredictionResult } from '../../utils/complaintAI';
 
 export const ComplaintsView: React.FC = () => {
   const { activeTrip } = useTrips();
@@ -37,55 +44,46 @@ export const ComplaintsView: React.FC = () => {
   const [priority, setPriority] = useState<ComplaintPriority>('Haute');
   const [description, setDescription] = useState('');
   const [requestedCompensation, setRequestedCompensation] = useState('200 EUR');
-  const [aiUrgencyExplanation, setAiUrgencyExplanation] = useState<string>('');
 
-  // AI Evaluation of Urgency
-  const evaluateUrgencyWithAI = (textToAnalyze: string, cat: string) => {
-    const t = (textToAnalyze + ' ' + cat).toLowerCase();
-    if (
-      t.includes('annulé') || t.includes('passeport') || t.includes('urgence') || 
-      t.includes('accident') || t.includes('hôpital') || t.includes('médical') || 
-      t.includes('bloqué') || t.includes('sécurité') || t.includes('danger') || 
-      t.includes('volé') || t.includes('sans abri') || t.includes('coincé')
-    ) {
-      return { 
-        level: 'Urgente' as ComplaintPriority, 
-        reason: 'IA Détection critique : Impact immédiat sur la sécurité, les vols ou l\'assistance médicale.' 
-      };
-    }
-    if (
-      t.includes('bagage') || t.includes('perdu') || t.includes('frais') || 
-      t.includes('hôtel') || t.includes('logement') || t.includes('remboursement') || 
-      t.includes('surcoût') || t.includes('retard') || t.includes('train')
-    ) {
-      return { 
-        level: 'Haute' as ComplaintPriority, 
-        reason: 'IA Détection : Préjudice logistique ou financier direct nécessitant une indemnisation rapide.' 
-      };
-    }
-    if (
-      t.includes('guide') || t.includes('activité') || t.includes('bruit') || 
-      t.includes('propreté') || t.includes('climatisation') || t.includes('service')
-    ) {
-      return { 
-        level: 'Moyenne' as ComplaintPriority, 
-        reason: 'IA Détection : Désagrément d\'agrément sans urgence vitale ou logistique.' 
-      };
-    }
-    return { 
-      level: 'Basse' as ComplaintPriority, 
-      reason: 'IA Détection : Remarque générale ou demande d\'information standard.' 
-    };
-  };
+  // AI Prediction & User Manual Override States
+  const [aiPrediction, setAiPrediction] = useState<AIPredictionResult | null>(null);
+  const [isManualCategory, setIsManualCategory] = useState(false);
+  const [isManualPriority, setIsManualPriority] = useState(false);
 
-  // Run AI urgency check whenever title, description, or category changes
+  // Status Notification Toast / Banner (Email notification feedback)
+  const [statusNotification, setStatusNotification] = useState<{
+    type: 'success' | 'info' | 'error';
+    message: string;
+  } | null>(null);
+
+  // Real-time AI Classification & Urgency Assessment
   useEffect(() => {
-    if (title || description) {
-      const { level, reason } = evaluateUrgencyWithAI(`${title} ${description}`, category);
-      setPriority(level);
-      setAiUrgencyExplanation(reason);
+    if (title.trim().length >= 3 || description.trim().length >= 3) {
+      const pred = predictComplaintWithAI(title, description);
+      setAiPrediction(pred);
+
+      // Auto-assign category if not manually overridden
+      if (!isManualCategory) {
+        setCategory(pred.category);
+      }
+      // Auto-assign urgency level if not manually overridden
+      if (!isManualPriority) {
+        setPriority(pred.priority);
+      }
+    } else {
+      setAiPrediction(null);
     }
-  }, [title, description, category]);
+  }, [title, description, isManualCategory, isManualPriority]);
+
+  // Reset manual overrides and revert to AI predictions
+  const handleResetToAIPrediction = () => {
+    if (aiPrediction) {
+      setCategory(aiPrediction.category);
+      setPriority(aiPrediction.priority);
+    }
+    setIsManualCategory(false);
+    setIsManualPriority(false);
+  };
 
   // Admin / Organizer resolution notes state
   const [resolutionNoteInput, setResolutionNoteInput] = useState('');
@@ -116,6 +114,7 @@ export const ComplaintsView: React.FC = () => {
     await api.complaints.create({
       tripId: activeTrip.id,
       userId: currentUser?.id || 'usr-default',
+      userEmail: currentUser?.email,
       userName: currentUser?.name || 'Voyageur',
       title,
       category,
@@ -130,18 +129,31 @@ export const ComplaintsView: React.FC = () => {
     setIsAddModalOpen(false);
     setTitle('');
     setDescription('');
+    setIsManualCategory(false);
+    setIsManualPriority(false);
+    setAiPrediction(null);
   };
 
-  // Advanced Feature: Workflow Resolution & Arbitration (Amine)
+  // Advanced Feature: Workflow Resolution & Arbitration + Email Notification
   const handleUpdateStatus = async (id: string, newStatus: ComplaintStatus) => {
-    await api.complaints.update(id, {
+    const res = await api.complaints.update(id, {
       status: newStatus,
       resolutionNotes: resolutionNoteInput || selectedComplaint?.resolutionNotes,
       awardedCompensation: awardedCompensationInput || selectedComplaint?.awardedCompensation
     });
-    if (newStatus === 'Résolu') {
 
+    if (res?.emailSent) {
+      setStatusNotification({
+        type: 'success',
+        message: `✉️ Notification email envoyée avec succès à l'auteur de la réclamation !`
+      });
+    } else if (res?.emailStatusMessage) {
+      setStatusNotification({
+        type: 'info',
+        message: `Statut mis à jour (${res.emailStatusMessage})`
+      });
     }
+
     await loadComplaints();
     if (selectedComplaint && selectedComplaint.id === id) {
       setSelectedComplaint(prev => prev ? {
@@ -152,6 +164,10 @@ export const ComplaintsView: React.FC = () => {
       } : null);
     }
     setResolutionNoteInput('');
+
+    setTimeout(() => {
+      setStatusNotification(null);
+    }, 6000);
   };
 
   const getPriorityColor = (p: ComplaintPriority) => {
@@ -190,7 +206,7 @@ export const ComplaintsView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header with Member Badge */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 shadow-sm">
         <div className="flex items-center space-x-3">
           <div className="p-3 bg-rose-500/10 text-rose-400 rounded-xl border border-rose-500/20">
@@ -199,9 +215,13 @@ export const ComplaintsView: React.FC = () => {
           <div>
             <div className="flex items-center space-x-2">
               <h2 className="text-xl font-bold text-white">Réclamations & Support</h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center space-x-1">
+                <Sparkles className="w-3 h-3 text-amber-400" />
+                <span>IA &amp; Notifications Mail</span>
+              </span>
             </div>
             <p className="text-sm text-slate-400 mt-0.5">
-              Gestion des litiges, timeline d'assistance et arbitrage des indemnisations.
+              Prédiction automatique par IA des types et de l'urgence des litiges avec suivi email en temps réel.
             </p>
           </div>
         </div>
@@ -226,11 +246,11 @@ export const ComplaintsView: React.FC = () => {
         <div className="flex items-center space-x-2">
           <ShieldCheck className="w-4 h-4 text-amber-400" />
           <span>
-            Connecté en tant que <strong className="text-white">{currentUser?.name}</strong> (Rôle: <span className="text-amber-300 font-bold">{currentUser?.role}</span>).
+            Connecté en tant que <strong className="text-white">{currentUser?.name}</strong> (Rôle : <span className="text-amber-300 font-bold">{currentUser?.role}</span>).
           </span>
         </div>
         <span className="text-slate-400">
-          {canManageComplaints ? '✓ Pouvoir d\'arbitrage & résolution actif' : 'Vue voyageur (dépôt & suivi)'}
+          {canManageComplaints ? '✓ Pouvoir d\'arbitrage & notifications email actifs' : 'Vue voyageur (dépôt & suivi temps réel)'}
         </span>
       </div>
 
@@ -262,7 +282,7 @@ export const ComplaintsView: React.FC = () => {
           {isTraveler && (
             <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400 flex items-center space-x-2">
               <Lock className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              <span>Espace confidentiel : seules vos réclamations personnelles vous sont visibles. Les autres voyageurs ne peuvent pas voir vos dossiers.</span>
+              <span>Espace confidentiel : seules vos réclamations personnelles vous sont visibles. Vous recevrez un email à chaque changement de statut.</span>
             </div>
           )}
 
@@ -316,6 +336,9 @@ export const ComplaintsView: React.FC = () => {
                       <div className="flex items-center space-x-1.5">
                         <User className="w-3 h-3 text-slate-400" />
                         <span>{comp.userName}</span>
+                        {comp.userEmail && (
+                          <span className="text-slate-600 font-mono text-[10px]">({comp.userEmail})</span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-1">
                         <Calendar className="w-3 h-3 text-slate-400" />
@@ -328,7 +351,7 @@ export const ComplaintsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Detail & Arbitration Panel (Amine Feature) */}
+        {/* Right Column: Detail & Arbitration Panel */}
         <div className="lg:col-span-1 space-y-4">
           {selectedComplaint ? (
             <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
@@ -341,6 +364,23 @@ export const ComplaintsView: React.FC = () => {
                   </span>
                   {getStatusBadge(selectedComplaint.status)}
                 </div>
+              </div>
+
+              {/* Traveler & Email Info */}
+              <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs space-y-1">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>Déclarant :</span>
+                  <span className="font-semibold text-white">{selectedComplaint.userName}</span>
+                </div>
+                {selectedComplaint.userEmail && (
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span className="flex items-center space-x-1">
+                      <Mail className="w-3 h-3 text-sky-400" />
+                      <span>Email notifié :</span>
+                    </span>
+                    <span className="font-mono text-sky-300 text-[11px]">{selectedComplaint.userEmail}</span>
+                  </div>
+                )}
               </div>
 
               {/* Description */}
@@ -376,13 +416,28 @@ export const ComplaintsView: React.FC = () => {
                 </div>
               )}
 
+              {/* Status Feedback Notification Toast */}
+              {statusNotification && (
+                <div className={`p-3 rounded-xl text-xs flex items-start space-x-2 border transition-all ${
+                  statusNotification.type === 'success'
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-200'
+                    : 'bg-sky-500/15 border-sky-500/30 text-sky-200'
+                }`}>
+                  <Mail className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-400" />
+                  <span className="font-semibold leading-relaxed">{statusNotification.message}</span>
+                </div>
+              )}
+
               {/* Admin / Organizer Actions */}
               {canManageComplaints && (
                 <div className="space-y-3 pt-3 border-t border-slate-800">
-                  <label className="text-xs font-bold text-amber-300 flex items-center space-x-1">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Arbitrage & Résolution (Admin / Organizer)</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-amber-300 flex items-center space-x-1">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Arbitrage (Email automatique au voyageur)</span>
+                    </label>
+                    <Mail className="w-3.5 h-3.5 text-sky-400" />
+                  </div>
 
                   <input
                     type="text"
@@ -396,7 +451,7 @@ export const ComplaintsView: React.FC = () => {
                     rows={2}
                     value={resolutionNoteInput}
                     onChange={e => setResolutionNoteInput(e.target.value)}
-                    placeholder="Motif de la décision ou instructions d'indemnisation..."
+                    placeholder="Motif de la décision ou instructions d'indemnisation (inclus dans l'email)..."
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
                   />
 
@@ -432,12 +487,17 @@ export const ComplaintsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal: Add Complaint */}
+      {/* Modal: Add Complaint with Advanced AI Assistant */}
       <Modal
         isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setIsManualCategory(false);
+          setIsManualPriority(false);
+          setAiPrediction(null);
+        }}
         title="Déposer une Réclamation"
-        subtitle="Signalez un préjudice ou imprévu sur votre voyage pour prise en charge"
+        subtitle="Classification intelligente par IA et alerte automatique"
       >
         <form onSubmit={handleCreateComplaint} className="space-y-4">
           {/* Contexte voyage et déclarant */}
@@ -448,28 +508,132 @@ export const ComplaintsView: React.FC = () => {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-slate-400">Voyageur déclarant :</span>
-              <span className="font-semibold text-rose-300">👤 {currentUser?.name || 'Voyageur'}</span>
+              <span className="font-semibold text-rose-300">👤 {currentUser?.name || 'Voyageur'} {currentUser?.email ? `(${currentUser.email})` : ''}</span>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Motif du litige</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-300">Motif ou intitulé du litige</label>
+              <span className="text-[10px] text-amber-400 font-bold flex items-center space-x-1">
+                <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
+                <span>IA Active</span>
+              </span>
+            </div>
             <input
               type="text"
               required
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="ex: Bagage endommagé ou Retard de train > 3h"
+              placeholder="ex: Vol annulé sans solution d'hébergement ou Bagage perdu à l'aéroport"
               className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Description détaillée des faits</label>
+            <textarea
+              rows={3}
+              required
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Expliquez la situation, l'impact sur vos vacances, les justificatifs et démarches déjà engagées..."
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
+            />
+          </div>
+
+          {/* Real-time AI Analysis Card */}
+          {aiPrediction && (
+            <div className={`p-3.5 rounded-xl border space-y-2.5 transition-all ${
+              aiPrediction.isCritical
+                ? 'bg-rose-950/40 border-rose-500/50 text-rose-200'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Bot className={`w-4 h-4 ${aiPrediction.isCritical ? 'text-rose-400' : 'text-amber-400'}`} />
+                  <span className="font-bold text-xs">
+                    Diagnostic IA en temps réel
+                  </span>
+                </div>
+                <div className="flex items-center space-x-1.5 text-[10px]">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-900/80 border border-slate-700 font-semibold text-slate-300">
+                    Confiance : {aiPrediction.confidence}%
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full font-bold ${
+                    aiPrediction.urgencyScore >= 65
+                      ? 'bg-rose-500/30 text-rose-300 border border-rose-500/50'
+                      : aiPrediction.urgencyScore >= 40
+                      ? 'bg-orange-500/30 text-orange-300 border border-orange-500/50'
+                      : 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/50'
+                  }`}>
+                    Urgence : {aiPrediction.urgencyScore}/100
+                  </span>
+                </div>
+              </div>
+
+              {aiPrediction.isCritical && (
+                <div className="p-2 rounded-lg bg-rose-500/20 border border-rose-500/40 text-[11px] text-rose-200 font-semibold flex items-center space-x-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
+                  <span>Alerte Critique : incident majeur lié à la sécurité, santé ou blocage immédiat.</span>
+                </div>
+              )}
+
+              {aiPrediction.detectedKeywords.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] text-slate-400">Mots-clés repérés :</span>
+                  {aiPrediction.detectedKeywords.map((kw, i) => (
+                    <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700/80 text-amber-300 font-medium">
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                {aiPrediction.explanation}
+              </p>
+
+              {aiPrediction.recommendedAction && (
+                <div className="p-2 rounded-lg bg-slate-950/70 border border-slate-800 text-[11px] text-sky-200 flex items-start space-x-1.5">
+                  <Zap className="w-3.5 h-3.5 text-sky-400 flex-shrink-0 mt-0.5" />
+                  <span><strong>Conseil IA :</strong> {aiPrediction.recommendedAction}</span>
+                </div>
+              )}
+
+              {(isManualCategory || isManualPriority) && (
+                <div className="flex items-center justify-between pt-1 border-t border-slate-800/80 text-[11px]">
+                  <span className="text-slate-400">Valeurs modifiées manuellement</span>
+                  <button
+                    type="button"
+                    onClick={handleResetToAIPrediction}
+                    className="text-amber-400 hover:text-amber-300 flex items-center space-x-1 font-semibold underline underline-offset-2"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Réaligner sur l'IA</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Catégorie</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-slate-300">Catégorie</label>
+                {aiPrediction && !isManualCategory && (
+                  <span className="text-[9px] text-emerald-400 font-bold flex items-center space-x-0.5">
+                    <Check className="w-2.5 h-2.5" />
+                    <span>Auto IA</span>
+                  </span>
+                )}
+              </div>
               <select
                 value={category}
-                onChange={e => setCategory(e.target.value as Complaint['category'])}
+                onChange={e => {
+                  setCategory(e.target.value as Complaint['category']);
+                  setIsManualCategory(true);
+                }}
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
               >
                 <option value="Transport / Vol">Transport / Vol</option>
@@ -484,33 +648,36 @@ export const ComplaintsView: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-semibold text-slate-300">Degré d'urgence</label>
-                <span className="text-[10px] text-amber-400 font-bold flex items-center space-x-1">
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  <span>IA Autonome</span>
-                </span>
+                {aiPrediction && !isManualPriority && (
+                  <span className="text-[9px] text-amber-400 font-bold flex items-center space-x-0.5">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    <span>Prédit IA</span>
+                  </span>
+                )}
               </div>
               <select
                 value={priority}
-                onChange={e => setPriority(e.target.value as ComplaintPriority)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500 font-bold text-amber-300"
+                onChange={e => {
+                  setPriority(e.target.value as ComplaintPriority);
+                  setIsManualPriority(true);
+                }}
+                className={`w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-rose-500 font-bold ${
+                  priority === 'Urgente'
+                    ? 'text-rose-400'
+                    : priority === 'Haute'
+                    ? 'text-orange-400'
+                    : priority === 'Moyenne'
+                    ? 'text-amber-300'
+                    : 'text-slate-300'
+                }`}
               >
-                <option value="Basse">🟢 Basse (Simple retour)</option>
-                <option value="Moyenne">🟡 Moyenne</option>
-                <option value="Haute">🟠 Haute (Impact financier)</option>
-                <option value="Urgente">🔴 Urgente (Bloqué sur place / Critique)</option>
+                <option value="Basse">🟢 Basse (Remarque simple)</option>
+                <option value="Moyenne">🟡 Moyenne (Désagrément)</option>
+                <option value="Haute">🟠 Haute (Préjudice financier/logistique)</option>
+                <option value="Urgente">🔴 Urgente (Critique / Bloqué / Santé)</option>
               </select>
             </div>
           </div>
-
-          {aiUrgencyExplanation && (
-            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-200 flex items-start space-x-2">
-              <Sparkles className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <strong className="text-amber-300">Évaluation de l'IA en temps réel :</strong>
-                <p className="mt-0.5 text-slate-300 text-[11px] leading-relaxed">{aiUrgencyExplanation}</p>
-              </div>
-            </div>
-          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">Dédommagement ou compensation souhaitée</label>
@@ -518,19 +685,7 @@ export const ComplaintsView: React.FC = () => {
               type="text"
               value={requestedCompensation}
               onChange={e => setRequestedCompensation(e.target.value)}
-              placeholder="ex: Remboursement 180 EUR ou Billet de retour"
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Description circonstanciée</label>
-            <textarea
-              rows={3}
-              required
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Décrivez avec précision la chronologie des faits, les préjudices subis et les démarches déjà entreprises..."
+              placeholder="ex: Remboursement 180 EUR, nuitée ou bon d'achat"
               className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
             />
           </div>
@@ -538,7 +693,12 @@ export const ComplaintsView: React.FC = () => {
           <div className="pt-4 flex justify-end space-x-3">
             <button
               type="button"
-              onClick={() => setIsAddModalOpen(false)}
+              onClick={() => {
+                setIsAddModalOpen(false);
+                setIsManualCategory(false);
+                setIsManualPriority(false);
+                setAiPrediction(null);
+              }}
               className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 text-sm font-semibold rounded-xl"
             >
               Annuler

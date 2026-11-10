@@ -28719,6 +28719,7 @@ import mongoose8, { Schema as Schema7 } from "mongoose";
 var ComplaintSchema = new Schema7({
   tripId: { type: String, required: true, index: true },
   userId: { type: String, required: true },
+  userEmail: { type: String, default: "" },
   userName: { type: String, default: "Voyageur" },
   title: { type: String, required: true },
   category: {
@@ -42130,6 +42131,154 @@ async function sendActivityAlertEmail({
     return { sent: false, message: `Erreur SMTP : ${msg}` };
   }
 }
+async function sendComplaintStatusEmail({
+  to,
+  userName,
+  complaintTitle,
+  category,
+  previousStatus,
+  newStatus,
+  tripTitle,
+  resolutionNotes,
+  awardedCompensation,
+  complaintId
+}) {
+  let headerGradient = "linear-gradient(135deg, #0284c7, #0d9488)";
+  let statusBadgeColor = "#0284c7";
+  let statusBadgeBg = "#0369a120";
+  let statusIcon = "&#128196;";
+  let statusTitle = "Mise \xE0 jour de votre r\xE9clamation";
+  if (newStatus === "R\xE9solu") {
+    headerGradient = "linear-gradient(135deg, #059669, #0d9488)";
+    statusBadgeColor = "#10b981";
+    statusBadgeBg = "#065f4625";
+    statusIcon = "&#9989;";
+    statusTitle = "R\xE9clamation R\xE9solue \u2013 Prise en charge valid\xE9e";
+  } else if (newStatus === "En cours d'analyse") {
+    headerGradient = "linear-gradient(135deg, #d97706, #b45309)";
+    statusBadgeColor = "#f59e0b";
+    statusBadgeBg = "#78350f25";
+    statusIcon = "&#9203;";
+    statusTitle = "Dossier Pris en Charge \u2013 En cours d'analyse";
+  } else if (newStatus === "Rejet\xE9") {
+    headerGradient = "linear-gradient(135deg, #e11d48, #9f1239)";
+    statusBadgeColor = "#f43f5e";
+    statusBadgeBg = "#88133725";
+    statusIcon = "&#10060;";
+    statusTitle = "Dossier Trait\xE9 \u2013 Non retenu";
+  }
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                max-width: 580px; margin: 0 auto; background-color: #0f172a;
+                border-radius: 16px; overflow: hidden; border: 1px solid #1e293b; color: #f8fafc;">
+      <div style="background: ${headerGradient}; padding: 32px 24px; text-align: center;">
+        <h1 style="margin: 0; color: #fff; font-size: 22px; font-weight: 800;">
+          ${statusIcon} ${statusTitle}
+        </h1>
+        <p style="margin: 6px 0 0; color: rgba(255,255,255,0.9); font-size: 13px;">
+          Travel Tracker Support &bull; Service Litiges &amp; Assistance
+        </p>
+      </div>
+
+      <div style="padding: 32px 24px;">
+        <p style="font-size: 15px; color: #e2e8f0; margin-top: 0;">
+          Bonjour ${userName || "Voyageur"},
+        </p>
+        <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">
+          Nous vous informons qu'une \xE9volution a \xE9t\xE9 enregistr\xE9e sur votre r\xE9clamation d\xE9pos\xE9e sur Travel Tracker.
+        </p>
+
+        <!-- Ticket Card -->
+        <div style="background-color: #1e293b; border-radius: 12px; padding: 20px; margin: 24px 0; border: 1px solid #334155;">
+          <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 6px;">
+            Dossier de r\xE9clamation
+          </div>
+          <h2 style="font-size: 17px; font-weight: 800; color: #fff; margin: 0 0 10px 0;">
+            ${complaintTitle}
+          </h2>
+
+          <div style="display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; color: ${statusBadgeColor}; background-color: ${statusBadgeBg}; border: 1px solid ${statusBadgeColor}40; margin-bottom: 14px;">
+            Nouveau statut : ${newStatus}
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #cbd5e1; margin-top: 8px;">
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8; width: 40%;">Cat\xE9gorie :</td>
+              <td style="padding: 6px 0; font-weight: 600; color: #f1f5f9;">${category}</td>
+            </tr>
+            ${previousStatus ? `
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Statut ant\xE9rieur :</td>
+              <td style="padding: 6px 0; color: #94a3b8;">${previousStatus}</td>
+            </tr>` : ""}
+            ${tripTitle ? `
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Voyage concern\xE9 :</td>
+              <td style="padding: 6px 0; font-weight: 600; color: #38bdf8;">&#9992; ${tripTitle}</td>
+            </tr>` : ""}
+            ${complaintId ? `
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">R\xE9f dossier :</td>
+              <td style="padding: 6px 0; font-family: monospace; font-size: 11px; color: #94a3b8;">${complaintId}</td>
+            </tr>` : ""}
+          </table>
+        </div>
+
+        ${awardedCompensation ? `
+        <div style="background-color: #064e3b30; border: 1px solid #059669; border-radius: 12px; padding: 16px 20px; margin: 20px 0;">
+          <div style="font-size: 12px; font-weight: bold; color: #34d399; margin-bottom: 4px;">
+            &#128176; D\xE9dommagement ou compensation accord\xE9e :
+          </div>
+          <div style="font-size: 18px; font-weight: 800; color: #a7f3d0;">
+            ${awardedCompensation}
+          </div>
+        </div>` : ""}
+
+        ${resolutionNotes ? `
+        <div style="background-color: #1e293b; border-left: 4px solid #38bdf8; border-radius: 0 10px 10px 0; padding: 14px 18px; margin: 20px 0;">
+          <div style="font-size: 11px; color: #38bdf8; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">
+            Note de l'organisateur / arbitrage :
+          </div>
+          <p style="font-size: 13px; color: #e2e8f0; margin: 0; line-height: 1.5;">
+            ${resolutionNotes}
+          </p>
+        </div>` : ""}
+
+        <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; margin-top: 24px;">
+          Vous pouvez consulter les d\xE9tails complets et suivre le traitement de votre dossier depuis votre espace r\xE9clamations sur Travel Tracker.
+        </p>
+      </div>
+
+      <div style="background-color: #090d16; padding: 16px 24px; border-top: 1px solid #1e293b;
+                  text-align: center; font-size: 11px; color: #475569;">
+        Travel Tracker PWA &bull; Syst\xE8me de r\xE9solution &amp; support voyage
+      </div>
+    </div>
+  `;
+  if (!hasSmtpConfig()) {
+    console.warn("[SMTP Complaints] SMTP non configur\xE9, email non envoy\xE9.");
+    return {
+      sent: false,
+      message: "SMTP non configur\xE9 dans les variables d'environnement."
+    };
+  }
+  try {
+    const transporter = createTransporter();
+    await transporter.sendMail({
+      from: getSmtpFrom(),
+      to,
+      subject: `[Support Travel Tracker] Mise \xE0 jour : "${complaintTitle}" (${newStatus})`,
+      text: `Votre r\xE9clamation "${complaintTitle}" est pass\xE9e au statut : ${newStatus}.` + (resolutionNotes ? ` Note : ${resolutionNotes}` : ""),
+      html
+    });
+    console.log(`[SMTP Complaints] Email de statut envoy\xE9 \xE0 ${to} (Nouveau statut : ${newStatus})`);
+    return { sent: true, message: `Email de notification envoy\xE9 avec succ\xE8s \xE0 ${to}` };
+  } catch (err) {
+    const msg = err.message;
+    console.error("[SMTP Complaints Error]", msg);
+    return { sent: false, message: `Erreur SMTP : ${msg}` };
+  }
+}
 
 // server/routes/users.ts
 var router = (0, import_express.Router)();
@@ -43194,7 +43343,15 @@ router7.get("/", async (req, res) => {
 });
 router7.post("/", async (req, res) => {
   try {
-    const complaint = new ComplaintModel(req.body);
+    const complaintData = { ...req.body };
+    if (!complaintData.userEmail && complaintData.userId) {
+      try {
+        const user = await UserModel.findById(complaintData.userId);
+        if (user?.email) complaintData.userEmail = user.email;
+      } catch {
+      }
+    }
+    const complaint = new ComplaintModel(complaintData);
     await complaint.save();
     res.status(201).json(complaint);
   } catch (err) {
@@ -43204,18 +43361,67 @@ router7.post("/", async (req, res) => {
 router7.put("/:id", async (req, res) => {
   try {
     const { status, awardedCompensation, resolutionNotes } = req.body;
-    const complaint = await ComplaintModel.findByIdAndUpdate(
-      req.params.id,
-      {
-        status,
-        awardedCompensation,
-        resolutionNotes,
-        updatedAt: /* @__PURE__ */ new Date()
-      },
-      { new: true }
-    );
-    if (!complaint) return res.status(404).json({ error: "R\xE9clamation non trouv\xE9e" });
-    res.json(complaint);
+    const existing = await ComplaintModel.findById(req.params.id);
+    if (!existing) return res.status(404).json({ error: "R\xE9clamation non trouv\xE9e" });
+    const previousStatus = existing.status;
+    const isStatusChanged = status && status !== previousStatus;
+    if (status !== void 0) existing.status = status;
+    if (awardedCompensation !== void 0) existing.awardedCompensation = awardedCompensation;
+    if (resolutionNotes !== void 0) existing.resolutionNotes = resolutionNotes;
+    existing.updatedAt = /* @__PURE__ */ new Date();
+    await existing.save();
+    let emailSent = false;
+    let emailStatusMessage = "";
+    if (isStatusChanged) {
+      let targetEmail = existing.userEmail;
+      let userName = existing.userName;
+      if (!targetEmail && existing.userId) {
+        try {
+          const user = await UserModel.findById(existing.userId);
+          if (user?.email) {
+            targetEmail = user.email;
+            if (!userName || userName === "Voyageur") userName = user.name;
+          }
+        } catch {
+        }
+      }
+      let tripTitle = "";
+      if (existing.tripId) {
+        try {
+          const trip = await TripModel.findById(existing.tripId);
+          if (trip?.title) tripTitle = trip.title;
+        } catch {
+        }
+      }
+      if (targetEmail) {
+        try {
+          const mailRes = await sendComplaintStatusEmail({
+            to: targetEmail,
+            userName,
+            complaintTitle: existing.title,
+            category: existing.category,
+            previousStatus,
+            newStatus: existing.status,
+            tripTitle,
+            resolutionNotes: existing.resolutionNotes,
+            awardedCompensation: existing.awardedCompensation,
+            complaintId: existing._id?.toString() || existing.id
+          });
+          emailSent = mailRes.sent;
+          emailStatusMessage = mailRes.message;
+        } catch (mailErr) {
+          emailSent = false;
+          emailStatusMessage = mailErr.message;
+        }
+      } else {
+        emailStatusMessage = "Aucun email trouv\xE9 pour ce voyageur.";
+      }
+    }
+    res.json({
+      ...existing.toObject(),
+      emailSent,
+      emailStatusMessage
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
