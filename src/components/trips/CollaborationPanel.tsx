@@ -93,10 +93,22 @@ export const CollaborationPanel: React.FC<CollaborationPanelProps> = ({
       }
     };
 
+    const handleChatHistory = (history: CollaborationMessage[]) => {
+      if (Array.isArray(history)) {
+        setMessages(history);
+        scrollToBottom();
+      }
+    };
+
     collaborationService.on('chat-message', handleChatMessage);
+    collaborationService.on('chat-history', handleChatHistory);
+
+    // Fetch immédiat dès l'ouverture du composant
+    collaborationService.fetchRemoteMessages(trip.id);
 
     return () => {
       collaborationService.off('chat-message', handleChatMessage);
+      collaborationService.off('chat-history', handleChatHistory);
       collaborationService.leaveTrip();
     };
   }, [trip.id, currentUser.id, tripParticipants]);

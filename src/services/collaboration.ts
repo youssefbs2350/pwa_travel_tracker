@@ -140,8 +140,14 @@ class CollaborationService {
         formatted.forEach(m => map.set(m.id, m));
 
         const merged = Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp);
+        const hasNew = merged.length > local.length;
         this.saveTripMessages(tripId, merged);
         this.trigger('chat-history', merged);
+        if (hasNew) {
+          // Déclencher les nouveaux messages pour l'UI
+          const newOnes = merged.filter(m => !local.some(l => l.id === m.id));
+          newOnes.forEach(nm => this.trigger('chat-message', nm));
+        }
         return merged;
       }
     } catch (err) {
@@ -159,7 +165,7 @@ class CollaborationService {
       if (this.currentTripId === tripId) {
         this.fetchRemoteMessages(tripId);
       }
-    }, 3500);
+    }, 2000);
   }
 
   /**

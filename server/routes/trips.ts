@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Router, Request, Response } from 'express';
 import { TripModel } from '../models/Trip';
 import { PlaceModel } from '../models/Place';
@@ -394,8 +395,25 @@ Réponds STRICTEMENT avec un objet JSON sans markdown, respectant ce format :
 // GET /:id/messages : Récupère les messages échangés entre les participants du voyage
 router.get('/:id/messages', async (req: Request, res: Response) => {
   try {
-    const tripId = req.params.id;
-    const messages = await MessageModel.find({ tripId }).sort({ timestamp: 1 });
+    const idOrCode = req.params.id;
+    const possibleIds = [idOrCode];
+
+    // Trouver le voyage associé pour réconcilier ObjectId, shareCode et custom id
+    try {
+      const trip = mongoose.Types.ObjectId.isValid(idOrCode)
+        ? await TripModel.findById(idOrCode)
+        : await TripModel.findOne({ $or: [{ shareCode: idOrCode.toUpperCase() }, { id: idOrCode }] });
+
+      if (trip) {
+        possibleIds.push(trip._id.toString());
+        if (trip.shareCode) possibleIds.push(trip.shareCode);
+        if ((trip as any).id) possibleIds.push((trip as any).id);
+      }
+    } catch {
+      // ignore lookup error
+    }
+
+    const messages = await MessageModel.find({ tripId: { $in: possibleIds } }).sort({ timestamp: 1 });
     res.json(messages);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -405,7 +423,21 @@ router.get('/:id/messages', async (req: Request, res: Response) => {
 // POST /:id/messages : Envoie un message pour ce voyage
 router.post('/:id/messages', async (req: Request, res: Response) => {
   try {
-    const tripId = req.params.id;
+    const idOrCode = req.params.id;
+    let targetTripId = idOrCode;
+
+    try {
+      const trip = mongoose.Types.ObjectId.isValid(idOrCode)
+        ? await TripModel.findById(idOrCode)
+        : await TripModel.findOne({ $or: [{ shareCode: idOrCode.toUpperCase() }, { id: idOrCode }] });
+
+      if (trip) {
+        targetTripId = trip._id.toString();
+      }
+    } catch {
+      // ignore
+    }
+
     const { userId, userName, userAvatar, message, timestamp } = req.body;
 
     if (!message || !message.trim()) {
@@ -413,7 +445,7 @@ router.post('/:id/messages', async (req: Request, res: Response) => {
     }
 
     const newMsg = new MessageModel({
-      tripId,
+      tripId: targetTripId,
       userId: userId || 'usr-anonymous',
       userName: userName || 'Voyageur',
       userAvatar: userAvatar || '',

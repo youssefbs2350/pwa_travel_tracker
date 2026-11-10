@@ -875,6 +875,19 @@ export const TripsView: React.FC = () => {
                     <Printer className="w-4 h-4" />
                   </button>
 
+                  {/* Chat / Discussion de l'équipe */}
+                  <button
+                    onClick={() => {
+                      setSelectedFeatureTrip(trip);
+                      setActiveFeatureTab('collab');
+                      setShowFeaturesModal(true);
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                    title="Discussion de l'équipe (Chat en direct)"
+                  >
+                    <MessageCircle className="w-4 h-4 text-emerald-400" />
+                  </button>
+
                   {/* Fonctionnalités Avancées */}
                   <button
                     onClick={() => {
