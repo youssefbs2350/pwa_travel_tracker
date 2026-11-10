@@ -820,22 +820,26 @@ export const TripsView: React.FC = () => {
               </div>
 
               {/* Bottom Actions Footer */}
-              <div className="p-4 pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
-                <div className="flex items-center space-x-1.5">
+              <div className="p-3 pt-2 border-t border-slate-800 flex items-center justify-between gap-1.5">
+                <div className="flex items-center space-x-1 flex-shrink-0">
                   {!isPast ? (
                     <button
                       onClick={() => setActiveTripId(trip.id)}
-                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center space-x-1 transition-colors ${
+                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg flex items-center space-x-1 transition-colors ${
                         isActive
-                          ? 'bg-brand-500/20 text-brand-300'
+                          ? 'bg-brand-500/25 text-brand-300 border border-brand-500/40'
                           : 'bg-slate-800 hover:bg-brand-600 hover:text-white text-slate-300'
                       }`}
+                      title={isActive ? 'Voyage actuellement actif' : 'Activer ce voyage'}
                     >
                       <span>{isActive ? 'Actif' : 'Sélectionner'}</span>
                       <ArrowRight className="w-3 h-3" />
                     </button>
                   ) : (
-                    <span className="text-[10px] font-medium text-slate-500 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                    <span 
+                      className="text-[10px] font-semibold text-purple-300 bg-purple-950/80 px-2 py-0.5 rounded-md border border-purple-800/60 flex-shrink-0" 
+                      title="Voyage archivé"
+                    >
                       Archivé
                     </span>
                   )}
@@ -843,33 +847,32 @@ export const TripsView: React.FC = () => {
                   {canManageTrips && (
                     <button
                       onClick={() => handleToggleCompleted(trip)}
-                      className={`text-[10px] px-2 py-1 rounded-lg border transition-colors ${
+                      className={`text-[10px] px-1.5 py-0.5 rounded-md border transition-colors flex-shrink-0 ${
                         trip.status === 'Terminé'
                           ? 'bg-purple-500/10 text-purple-300 border-purple-500/30 hover:bg-purple-500/20'
                           : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                       }`}
                       title={trip.status === 'Terminé' ? 'Cliquer pour réactiver' : 'Marquer comme terminé'}
                     >
-                      {trip.status === 'Terminé' ? '✓ Fait' : 'Finir'}
+                      {trip.status === 'Terminé' ? '✓' : 'Finir'}
                     </button>
                   )}
                 </div>
 
-                <div className="flex items-center space-x-1">
-                  {/* Open in Google Calendar */}
+                <div className="flex items-center space-x-1 flex-wrap justify-end gap-y-1">
+                  {/* Open in Google Calendar (Bouton compact avec icône) */}
                   <button
                     onClick={() => handleOpenGoogleCalendar(trip)}
-                    className="px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 rounded-lg border border-blue-500/30 transition-all flex items-center space-x-1 text-[11px] font-semibold"
-                    title="Ouvrir directement dans Google Calendar sans téléchargement"
+                    className="p-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 rounded-lg border border-blue-500/30 transition-all flex items-center justify-center flex-shrink-0"
+                    title="Google Calendar : synchroniser et ouvrir directement dans l'agenda"
                   >
-                    <Calendar className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Google Calendar</span>
+                    <Calendar className="w-4 h-4 text-blue-400" />
                   </button>
 
                   {/* Print Roadbook */}
                   <button
                     onClick={() => handlePrintRoadbook(trip)}
-                    className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                    className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors flex-shrink-0"
                     title="Imprimer / Fiche Voyage PDF"
                   >
                     <Printer className="w-4 h-4" />
@@ -882,7 +885,7 @@ export const TripsView: React.FC = () => {
                       setActiveFeatureTab('collab');
                       setShowFeaturesModal(true);
                     }}
-                    className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                    className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors flex-shrink-0"
                     title="Discussion de l'équipe (Chat en direct)"
                   >
                     <MessageCircle className="w-4 h-4 text-emerald-400" />
@@ -894,11 +897,11 @@ export const TripsView: React.FC = () => {
                       setSelectedFeatureTrip(trip);
                       setShowFeaturesModal(true);
                     }}
-                    className="p-1.5 text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-colors group relative"
+                    className="p-1.5 text-slate-400 hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-colors group relative flex-shrink-0"
                     title="Fonctionnalités avancées"
                   >
                     <Target className="w-4 h-4" />
-                    <span className="absolute -top-6 right-0 bg-brand-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                    <span className="absolute -top-6 right-0 bg-brand-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
                       NOUVEAU
                     </span>
                   </button>
@@ -908,7 +911,7 @@ export const TripsView: React.FC = () => {
                       {/* Duplicate */}
                       <button
                         onClick={() => handleDuplicate(trip)}
-                        className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors flex-shrink-0"
                         title="Dupliquer ce voyage"
                       >
                         <Copy className="w-4 h-4" />
@@ -917,7 +920,7 @@ export const TripsView: React.FC = () => {
                       {/* Edit */}
                       <button
                         onClick={() => handleOpenEdit(trip)}
-                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors flex-shrink-0"
                         title="Modifier"
                       >
                         <Edit3 className="w-4 h-4" />
@@ -930,7 +933,7 @@ export const TripsView: React.FC = () => {
                             deleteTrip(trip.id);
                           }
                         }}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors flex-shrink-0"
                         title="Supprimer"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1510,6 +1513,44 @@ export const TripsView: React.FC = () => {
                 placeholder="ex: Tunisie"
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
               />
+            </div>
+          </div>
+
+          {/* Suggestions de destinations réelles certifiées */}
+          <div>
+            <span className="text-[11px] font-semibold text-slate-400 block mb-1">
+              ✨ Destinations suggérées (photos et informations certifiées) :
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { city: 'Djerba', country: 'Tunisie', cover: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=85' },
+                { city: 'Tunis', country: 'Tunisie', cover: 'https://images.unsplash.com/photo-1596484552834-6a58f850e0a1?w=1200&auto=format&fit=crop&q=85' },
+                { city: 'Tozeur', country: 'Tunisie', cover: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?w=1200&auto=format&fit=crop&q=85' },
+                { city: 'Paris', country: 'France', cover: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1200&auto=format&fit=crop&q=85' },
+                { city: 'Rome', country: 'Italie', cover: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=1200&auto=format&fit=crop&q=85' },
+                { city: 'Barcelone', country: 'Espagne', cover: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=1200&auto=format&fit=crop&q=85' },
+                { city: 'Tokyo', country: 'Japon', cover: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1200&auto=format&fit=crop&q=85' },
+              ].map(sug => (
+                <button
+                  type="button"
+                  key={sug.city}
+                  onClick={() => {
+                    setDestination(sug.city);
+                    setCountry(sug.country);
+                    setCoverImage(sug.cover);
+                    if (!title || title.startsWith('Voyage à') || title.startsWith('Échappée à')) {
+                      setTitle(`Échappée à ${sug.city}`);
+                    }
+                  }}
+                  className={`text-[10px] px-2 py-0.5 rounded-lg border transition-all ${
+                    destination.toLowerCase() === sug.city.toLowerCase()
+                      ? 'bg-brand-500/25 text-brand-300 border-brand-500/50 font-bold'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-600'
+                  }`}
+                >
+                  📍 {sug.city} ({sug.country})
+                </button>
+              ))}
             </div>
           </div>
 
