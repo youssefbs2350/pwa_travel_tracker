@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, UserRole } from '../types';
+import { User, UserRole, EmergencyInfo } from '../types';
 import { db } from '../db/database';
 
 interface AuthContextType {
@@ -17,6 +17,7 @@ interface AuthContextType {
   logout: () => void;
   updateUserRole: (targetUserId: string, newRole: UserRole) => Promise<{ success: boolean; message?: string }>;
   updatePreferences: (prefs: Partial<User['preferences']>) => Promise<void>;
+  updateEmergencyInfo: (info: EmergencyInfo) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -393,6 +394,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
+  const updateEmergencyInfo = async (info: EmergencyInfo) => {
+    if (!currentUser) return;
+    try {
+      await fetch(`/api/users/${currentUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emergencyInfo: info })
+      });
+    } catch {
+      // offline — data persisted locally below
+    }
+    await db.users.update(currentUser.id, { emergencyInfo: info });
+    const updatedUser = { ...currentUser, emergencyInfo: info };
+    setCurrentUser(updatedUser);
+    setAllUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -409,6 +427,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         updateUserRole,
         updatePreferences,
+        updateEmergencyInfo,
         updateAvatar
       }}
     >
