@@ -127,54 +127,60 @@ export const PlacesView: React.FC = () => {
     country: string
   ): Promise<{ name: string; lat: number; lon: number; address: string } | null> => {
 
-    // Map pays → code ISO 2 lettres pour forcer Nominatim dans le bon pays
     const COUNTRY_CODES: Record<string, string> = {
       tunisie: 'tn', france: 'fr', japon: 'jp', japan: 'jp', maroc: 'ma', morocco: 'ma',
       espagne: 'es', spain: 'es', italie: 'it', italy: 'it', allemagne: 'de', germany: 'de',
       'royaume-uni': 'gb', uk: 'gb', 'états-unis': 'us', usa: 'us', turquie: 'tr', turkey: 'tr',
       egypte: 'eg', egypt: 'eg', grece: 'gr', greece: 'gr', portugal: 'pt',
       algerie: 'dz', algeria: 'dz', belgique: 'be', belgium: 'be', suisse: 'ch', switzerland: 'ch',
+      italia: 'it', rome: 'it',
     };
 
     const countryCode = COUNTRY_CODES[country.toLowerCase().trim()] || '';
     const countryParam = countryCode ? `&countrycodes=${countryCode}` : '';
+    const [centerLat, centerLon] = destinationCoords ?? [0, 0];
 
-    // Requêtes structurées : cherche par type Nominatim (amenity, tourism, leisure)
-    // dans la ville exacte avec filtre pays
-    const queries = [
-      `https://nominatim.openstreetmap.org/search?amenity=${amenityType}&city=${encodeURIComponent(city)}&format=json&limit=8&addressdetails=1${countryParam}`,
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(amenityType + ' ' + city)}&format=json&limit=8&addressdetails=1${countryParam}`,
+    // Stratégie : cherche le type dans la ville, prend le premier résultat valide
+    const urls = [
+      `https://nominatim.openstreetmap.org/search?amenity=${amenityType}&city=${encodeURIComponent(city)}&format=json&limit=10${countryParam}`,
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(amenityType)}&city=${encodeURIComponent(city)}&format=json&limit=10${countryParam}`,
     ];
 
-    for (const url of queries) {
+    for (const url of urls) {
       try {
         const res = await fetch(url, { headers: { 'Accept-Language': 'fr,en' } });
         const data = await res.json();
-        if (data && data.length > 0) {
-          // Filtre : nom valide + coordonnées proches du centre ville (pas à l'autre bout du monde)
-          const [centerLat, centerLon] = destinationCoords ?? [0, 0];
-          const valid = data.filter((d: { name?: string; lat: string; lon: string }) => {
-            if (!d.name || d.name.length < 2 || d.name.match(/^\d/)) return false;
-            // Vérifie que le lieu est à moins de 100km du centre de la destination
-            if (centerLat && centerLon) {
-              const dLat = Math.abs(parseFloat(d.lat) - centerLat);
-              const dLon = Math.abs(parseFloat(d.lon) - centerLon);
-              if (dLat > 1.0 || dLon > 1.0) return false; // ~100km max
-            }
-            return true;
-          });
-          if (valid.length > 0) {
-            const pick = valid[Math.floor(Math.random() * Math.min(valid.length, 5))];
-            return {
-              name: pick.name,
-              lat: parseFloat(pick.lat),
-              lon: parseFloat(pick.lon),
-              address: pick.display_name.split(',').slice(0, 3).join(', '),
-            };
+        if (!data || data.length === 0) continue;
+
+        // Extrait le nom depuis display_name si name est absent
+        const extractName = (d: any): string => {
+          if (d.name && d.name.trim().length > 1) return d.name.trim();
+          // Nominatim met souvent le nom comme premier segment de display_name
+          const first = d.display_name?.split(',')[0]?.trim();
+          if (first && first.length > 1 && !first.match(/^\d/)) return first;
+          return '';
+        };
+
+        // Filtre : doit avoir un nom ET être proche de la destination
+        const valid = data.filter((d: any) => {
+          const name = extractName(d);
+          if (!name) return false;
+          if (centerLat && centerLon) {
+            const dLat = Math.abs(parseFloat(d.lat) - centerLat);
+            const dLon = Math.abs(parseFloat(d.lon) - centerLon);
+            if (dLat > 1.5 || dLon > 1.5) return false;
           }
+          return true;
+        });
+
+        if (valid.length > 0) {
+          const pick = valid[Math.floor(Math.random() * Math.min(valid.length, 5))];
+          const name = extractName(pick);
+          const address = pick.display_name?.split(',').slice(0, 3).join(', ') || `${city}, ${country}`;
+          return { name, lat: parseFloat(pick.lat), lon: parseFloat(pick.lon), address };
         }
       } catch {
-        // tentative suivante
+        continue;
       }
     }
     return null;
@@ -242,15 +248,24 @@ export const PlacesView: React.FC = () => {
     return fallbacks[category] || fallbacks['Monuments'];
   };
 
-  // Configuration des 3 types de suggestions avec les vrais types Nominatim amenity
-  const SUGGESTION_TYPES = [
-    { type: 'restaurant', label: 'Restaurant' as PlaceCategory, cost: 20, duration: 90,
+  // Configuration complète des catégories disponibles pour les suggestions
+  const SUGGESTION_CATEGORIES = [
+    { type: 'restaurant', label: 'Restaurant' as PlaceCategory, icon: '🍽️', cost: 20, duration: 90,
       desc: (city: string) => `Savourez la cuisine locale authentique de ${city}.` },
-    { type: 'park', label: 'Nature' as PlaceCategory, cost: 0, duration: 75,
+    { type: 'park', label: 'Nature' as PlaceCategory, icon: '🌿', cost: 0, duration: 75,
       desc: (city: string) => `Espace naturel et verdoyant au cœur de ${city}.` },
-    { type: 'museum', label: 'Monuments' as PlaceCategory, cost: 12, duration: 100,
+    { type: 'museum', label: 'Monuments' as PlaceCategory, icon: '🏛️', cost: 12, duration: 100,
       desc: (city: string) => `Découvrez le patrimoine historique de ${city}.` },
+    { type: 'hotel', label: 'Hébergement' as PlaceCategory, icon: '🏨', cost: 80, duration: 1440,
+      desc: (city: string) => `Hébergement confortable pour votre séjour à ${city}.` },
+    { type: 'beach', label: 'Plage' as PlaceCategory, icon: '🏖️', cost: 0, duration: 180,
+      desc: (city: string) => `Profitez des plages magnifiques de ${city}.` },
+    { type: 'attraction', label: 'Monuments' as PlaceCategory, icon: '🎯', cost: 15, duration: 120,
+      desc: (city: string) => `Attraction incontournable à visiter à ${city}.` },
   ];
+
+  // Catégorie sélectionnée par l'utilisateur pour les suggestions
+  const [selectedSuggestionCategory, setSelectedSuggestionCategory] = useState<typeof SUGGESTION_CATEGORIES[0] | null>(null);
 
   // État des suggestions chargées dynamiquement
   const [realSuggestions, setRealSuggestions] = useState<{
@@ -268,41 +283,78 @@ export const PlacesView: React.FC = () => {
   }[]>([]);
   const [loadingRealSuggestions, setLoadingRealSuggestions] = useState(false);
 
-  // Charge les vrais lieux quand la destination est géocodée
-  useEffect(() => {
+  // Charge 3 vrais lieux quand l'utilisateur sélectionne une catégorie
+  const handleSelectSuggestionCategory = async (cat: typeof SUGGESTION_CATEGORIES[0]) => {
     if (!destinationCoords || !activeTrip) return;
+    setSelectedSuggestionCategory(cat);
     setLoadingRealSuggestions(true);
     setRealSuggestions([]);
 
     const cleanCity = cityName.split(/\s+(?:la|le|les|et|&|the)\s+/i)[0].split('&')[0].trim();
     const country = activeTrip.country || '';
+    const [centerLat, centerLon] = destinationCoords;
 
-    Promise.all(
-      SUGGESTION_TYPES.map(async (st, i) => {
-        const place = await fetchRealPlaceByType(st.type, cleanCity, country);
-        if (!place) return null;
+    // Cherche 3 lieux différents du même type (en variant le rayon et l'offset)
+    const results = await Promise.all([0, 1, 2].map(async (i) => {
+      try {
+        const countryCode = ({
+          tunisie:'tn', france:'fr', japon:'jp', japan:'jp', maroc:'ma', morocco:'ma',
+          espagne:'es', spain:'es', italie:'it', italy:'it', allemagne:'de', germany:'de',
+          'royaume-uni':'gb', uk:'gb', 'états-unis':'us', usa:'us', turquie:'tr', turkey:'tr',
+          egypte:'eg', egypt:'eg', grece:'gr', greece:'gr', portugal:'pt',
+          algerie:'dz', algeria:'dz', belgique:'be', belgium:'be', suisse:'ch', switzerland:'ch',
+        } as Record<string,string>)[country.toLowerCase().trim()] || '';
+        const countryParam = countryCode ? `&countrycodes=${countryCode}` : '';
 
-        const imageUrl = await fetchWikimediaPhoto(place.name, cleanCity, st.label);
+        // Chaque itération utilise une limite différente pour obtenir des résultats variés
+        const url = `https://nominatim.openstreetmap.org/search?amenity=${cat.type}&city=${encodeURIComponent(cleanCity)}&format=json&limit=${10 + i * 5}${countryParam}`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'fr,en' } });
+        const data = await res.json();
+        if (!data || data.length === 0) return null;
+
+        const extractName = (d: any): string => {
+          if (d.name?.trim().length > 1) return d.name.trim();
+          const first = d.display_name?.split(',')[0]?.trim();
+          return (first && first.length > 1 && !first.match(/^\d/)) ? first : '';
+        };
+
+        const valid = data.filter((d: any) => {
+          const name = extractName(d);
+          if (!name) return false;
+          const dLat = Math.abs(parseFloat(d.lat) - centerLat);
+          const dLon = Math.abs(parseFloat(d.lon) - centerLon);
+          return dLat <= 1.5 && dLon <= 1.5;
+        });
+
+        if (valid.length === 0) return null;
+
+        // Prend un résultat différent selon l'index pour la variété
+        const pick = valid[Math.min(i * 2, valid.length - 1)];
+        const name = extractName(pick);
+        const address = pick.display_name?.split(',').slice(0, 3).join(', ') || `${cleanCity}, ${country}`;
+        const imageUrl = await fetchWikimediaPhoto(name, cleanCity, cat.label);
 
         return {
-          idKey: `sug-real-${st.type}-${i}`,
-          name: place.name,
-          category: st.label,
-          desc: st.desc(cleanCity),
-          cost: st.cost,
-          duration: st.duration,
-          rating: parseFloat((4.3 + Math.random() * 0.6).toFixed(1)),
-          lat: place.lat,
-          lon: place.lon,
-          address: place.address,
+          idKey: `sug-cat-${cat.type}-${i}-${Date.now()}`,
+          name: name || `${cat.label} — ${cleanCity}`,
+          category: cat.label,
+          desc: cat.desc(cleanCity),
+          cost: cat.cost,
+          duration: cat.duration,
+          rating: parseFloat((4.2 + Math.random() * 0.7).toFixed(1)),
+          lat: parseFloat(pick.lat),
+          lon: parseFloat(pick.lon),
+          address: address || `${cleanCity}, ${country}`,
           imageUrl,
         };
-      })
-    ).then(results => {
-      setRealSuggestions(results.filter(Boolean) as typeof realSuggestions);
-      setLoadingRealSuggestions(false);
-    });
-  }, [destinationCoords, activeTrip?.id]);
+      } catch {
+        return null;
+      }
+    }));
+
+    setRealSuggestions(results.filter(r => r !== null && r.name.length > 1) as typeof realSuggestions);
+    setLoadingRealSuggestions(false);
+  };
 
   // Ajoute un vrai lieu sur la carte — vérifie d'abord qu'il n'existe pas déjà
   const handleAddRealSuggestion = async (sug: typeof realSuggestions[0]) => {
@@ -769,7 +821,7 @@ export const PlacesView: React.FC = () => {
 
       {/* Suggestions Lieux Réels via OpenStreetMap */}
       {activeTrip && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-slate-900 to-sky-500/10 border border-amber-500/30 space-y-3 shadow-lg">
+        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-amber-500/30 space-y-3 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
@@ -782,18 +834,37 @@ export const PlacesView: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-slate-400">
-            Vrais établissements trouvés près de votre destination. Ajoutez-les sur votre carte en un clic !
+            Sélectionnez une catégorie pour découvrir 3 vrais établissements près de votre destination.
           </p>
 
-          {/* État de chargement des suggestions */}
+          {/* Boutons de sélection de catégorie */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {SUGGESTION_CATEGORIES.map(cat => (
+              <button
+                key={cat.type}
+                onClick={() => handleSelectSuggestionCategory(cat)}
+                disabled={loadingRealSuggestions}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                  selectedSuggestionCategory?.type === cat.type
+                    ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-md'
+                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-amber-500/50 hover:text-amber-300'
+                }`}
+              >
+                <span>{cat.icon}</span>
+                <span>{cat.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* État de chargement */}
           {loadingRealSuggestions && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
               {[1, 2, 3].map(i => (
-                <div key={i} className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-2 animate-pulse">
+                <div key={i} className="bg-slate-800 border border-slate-700 rounded-xl p-3 space-y-2 animate-pulse">
+                  <div className="h-24 bg-slate-700 rounded-lg w-full" />
                   <div className="h-3 bg-slate-700 rounded w-1/3" />
                   <div className="h-4 bg-slate-700 rounded w-3/4" />
                   <div className="h-3 bg-slate-700 rounded w-full" />
-                  <div className="h-3 bg-slate-700 rounded w-2/3" />
                   <div className="h-7 bg-slate-700 rounded-lg mt-2" />
                 </div>
               ))}
@@ -801,10 +872,18 @@ export const PlacesView: React.FC = () => {
           )}
 
           {/* Aucun résultat */}
-          {!loadingRealSuggestions && realSuggestions.length === 0 && (
+          {!loadingRealSuggestions && selectedSuggestionCategory && realSuggestions.length === 0 && (
             <div className="text-center py-4 text-slate-400 text-xs">
               <AlertCircle className="w-5 h-5 mx-auto mb-1 text-amber-500/60" />
-              Aucun lieu trouvé à proximité. Essayez d'ajouter un lieu manuellement.
+              Aucun {selectedSuggestionCategory.label.toLowerCase()} trouvé à proximité. Essayez une autre catégorie.
+            </div>
+          )}
+
+          {/* Message initial — aucune catégorie sélectionnée */}
+          {!loadingRealSuggestions && !selectedSuggestionCategory && (
+            <div className="text-center py-4 text-slate-500 text-xs">
+              <Sparkles className="w-5 h-5 mx-auto mb-1 text-amber-500/40" />
+              Choisissez une catégorie ci-dessus pour voir des suggestions réelles.
             </div>
           )}
 
@@ -815,7 +894,7 @@ export const PlacesView: React.FC = () => {
                 const isAdded = addedSuggestions.includes(sug.idKey) || places.some(p => p.name === sug.name);
                 const isLoading = loadingSuggestions.includes(sug.idKey);
                 return (
-                  <div key={sug.idKey} className="bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden flex flex-col hover:border-amber-500/40 transition-colors">
+                  <div key={sug.idKey} className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden flex flex-col hover:border-amber-500/40 transition-colors">
                     {/* Photo réelle du lieu */}
                     <div className="relative h-28 w-full bg-slate-800">
                       <img
@@ -833,18 +912,24 @@ export const PlacesView: React.FC = () => {
                         }}
                       />
                       <div className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded-md text-[10px] text-amber-300 font-semibold border border-amber-500/30">
-                        {sug.category}
+                        {sug.category || 'Lieu'}
                       </div>
                       <div className="absolute top-2 right-2 bg-amber-500 text-slate-950 px-2 py-0.5 rounded-md text-[10px] font-bold">
                         ⭐ {sug.rating}
                       </div>
                     </div>
 
-                    <div className="p-3 flex flex-col flex-1 justify-between space-y-2">
+                    <div className="p-3 flex flex-col flex-1 justify-between space-y-2 bg-slate-900">
                       <div className="space-y-1">
-                        <h4 className="text-xs font-bold text-white leading-tight line-clamp-2">{sug.name}</h4>
-                        <p className="text-[10px] text-slate-500 truncate">📍 {sug.address}</p>
-                        <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">{sug.desc}</p>
+                        <h4 className="text-xs font-bold text-white leading-tight line-clamp-2">
+                          {sug.name || '—'}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          📍 {sug.address || `${cityName}`}
+                        </p>
+                        <p className="text-[11px] text-slate-400 leading-snug line-clamp-2">
+                          {sug.desc || `Découvrez ce lieu à ${cityName}.`}
+                        </p>
                         <div className="flex items-center space-x-2 text-[10px] text-slate-400 pt-1">
                           <span>⏱ {sug.duration} min</span>
                           <span>•</span>
@@ -984,10 +1069,24 @@ export const PlacesView: React.FC = () => {
 
                     <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
                       <div className="flex items-center space-x-2">
-                        <span className="text-[10px] text-sky-400 hover:underline flex items-center space-x-0.5">
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            // 1. Scroll vers la carte
+                            mapContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            // 2. Zoom sur le lieu avec flyTo
+                            setTimeout(() => {
+                              mapInstanceRef.current?.flyTo([place.latitude, place.longitude], 16, { duration: 1.2 });
+                              setSelectedPlaceForMap(place);
+                            }, 400);
+                          }}
+                          className="text-[10px] text-sky-400 hover:text-sky-300 hover:underline flex items-center space-x-0.5 transition-colors"
+                          title="Voir sur la carte"
+                        >
                           <ExternalLink className="w-3 h-3" />
-                          <span>Carte</span>
-                        </span>
+                          <span>Voir sur carte</span>
+                        </button>
 
                         {/* Contrôle avis sur lieu visité uniquement */}
                         {isTripVisited ? (
