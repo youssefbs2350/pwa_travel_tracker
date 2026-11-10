@@ -171,6 +171,20 @@ export interface Review {
 export type ComplaintPriority = 'Basse' | 'Moyenne' | 'Haute' | 'Urgente';
 export type ComplaintStatus = 'Soumis' | 'En cours d\'analyse' | 'Résolu' | 'Rejeté';
 
+export interface ComplaintHistoryEntry {
+  id: string;
+  action: string;
+  date: string;
+  byUserId?: string;
+  byUserName: string;
+  byUserRole?: string;
+  previousStatus?: ComplaintStatus;
+  newStatus: ComplaintStatus;
+  note?: string;
+  awardedCompensation?: string;
+  emailSent?: boolean;
+}
+
 export interface Complaint {
   id: string;
   tripId: string;
@@ -188,6 +202,7 @@ export interface Complaint {
   incidentDate: string;
   updatedAt: string;
   createdAt: string;
+  history?: ComplaintHistoryEntry[];
 }
 
 export interface Recommendation {

@@ -30,6 +30,24 @@ router.post('/', async (req: Request, res: Response) => {
         // ignore
       }
     }
+
+    // Initialize complaint history audit trail
+    const initialHistoryEntry = {
+      id: 'hist-' + Date.now(),
+      action: 'Création & Dépôt du dossier',
+      date: new Date().toISOString(),
+      byUserId: complaintData.userId,
+      byUserName: complaintData.userName || 'Voyageur',
+      byUserRole: 'Traveler',
+      newStatus: 'Soumis',
+      note: complaintData.description 
+        ? (complaintData.description.length > 120 ? complaintData.description.slice(0, 120) + '...' : complaintData.description)
+        : 'Dépôt initial de la réclamation avec analyse IA.',
+      awardedCompensation: complaintData.requestedCompensation || '',
+      emailSent: false
+    };
+    complaintData.history = [initialHistoryEntry];
+
     const complaint = new ComplaintModel(complaintData);
     await complaint.save();
     res.status(201).json(complaint);
@@ -38,10 +56,10 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// PUT arbitrate / update status (Admin / Organizer action) + Notification Email
+// PUT arbitrate / update status (Admin / Organizer action) + Notification Email + History Log
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const { status, awardedCompensation, resolutionNotes } = req.body;
+    const { status, awardedCompensation, resolutionNotes, byUserId, byUserName, byUserRole } = req.body;
     
     // Find existing to detect status change
     const existing = await ComplaintModel.findById(req.params.id);
@@ -54,8 +72,6 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (awardedCompensation !== undefined) existing.awardedCompensation = awardedCompensation;
     if (resolutionNotes !== undefined) existing.resolutionNotes = resolutionNotes;
     existing.updatedAt = new Date();
-
-    await existing.save();
 
     let emailSent = false;
     let emailStatusMessage = '';
@@ -111,6 +127,36 @@ router.put('/:id', async (req: Request, res: Response) => {
         emailStatusMessage = 'Aucun email trouvé pour ce voyageur.';
       }
     }
+
+    // Append treatment step to History audit trail
+    let historyAction = 'Mise à jour du dossier';
+    if (existing.status === 'Résolu') {
+      historyAction = 'Arbitrage Favorable & Résolution';
+    } else if (existing.status === 'Rejeté') {
+      historyAction = 'Dossier Rejeté & Clôturé';
+    } else if (existing.status === "En cours d'analyse") {
+      historyAction = 'Prise en charge & Mise en analyse';
+    }
+
+    if (!Array.isArray(existing.history)) {
+      existing.history = [];
+    }
+
+    existing.history.push({
+      id: 'hist-' + Date.now(),
+      action: historyAction,
+      date: new Date().toISOString(),
+      byUserId: byUserId || '',
+      byUserName: byUserName || 'Organisateur / Support',
+      byUserRole: byUserRole || 'Admin',
+      previousStatus,
+      newStatus: existing.status,
+      note: resolutionNotes || existing.resolutionNotes || '',
+      awardedCompensation: awardedCompensation || existing.awardedCompensation || '',
+      emailSent
+    });
+
+    await existing.save();
 
     res.json({
       ...existing.toObject(),

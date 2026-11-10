@@ -20,15 +20,22 @@ import {
   Zap,
   Check,
   RotateCcw,
-  Info
+  Info,
+  History,
+  ArrowRight,
+  UserCheck,
+  FolderOpen,
+  Inbox
 } from 'lucide-react';
 
 import { useTrips } from '../../context/TripContext';
 import { useAuth } from '../../context/AuthContext';
-import { Complaint, ComplaintPriority, ComplaintStatus } from '../../types';
+import { Complaint, ComplaintPriority, ComplaintStatus, ComplaintHistoryEntry } from '../../types';
 import { Modal } from '../common/Modal';
 import { api } from '../../services/api';
 import { predictComplaintWithAI, AIPredictionResult } from '../../utils/complaintAI';
+
+type ViewTab = 'my_complaints' | 'all' | 'pending';
 
 export const ComplaintsView: React.FC = () => {
   const { activeTrip } = useTrips();
@@ -36,6 +43,11 @@ export const ComplaintsView: React.FC = () => {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  
+  // Navigation Tabs: "Mes réclamations créées" vs "Toutes" vs "À traiter"
+  const [activeTab, setActiveTab] = useState<ViewTab>(
+    currentUser?.role === 'Traveler' ? 'my_complaints' : 'all'
+  );
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
   // Form states
@@ -55,6 +67,10 @@ export const ComplaintsView: React.FC = () => {
     type: 'success' | 'info' | 'error';
     message: string;
   } | null>(null);
+
+  // Admin / Organizer resolution notes state
+  const [resolutionNoteInput, setResolutionNoteInput] = useState('');
+  const [awardedCompensationInput, setAwardedCompensationInput] = useState('');
 
   // Real-time AI Classification & Urgency Assessment
   useEffect(() => {
@@ -85,10 +101,6 @@ export const ComplaintsView: React.FC = () => {
     setIsManualPriority(false);
   };
 
-  // Admin / Organizer resolution notes state
-  const [resolutionNoteInput, setResolutionNoteInput] = useState('');
-  const [awardedCompensationInput, setAwardedCompensationInput] = useState('');
-
   const loadComplaints = async () => {
     if (!activeTrip) return;
     const items = await api.complaints.getByTrip(activeTrip.id);
@@ -111,7 +123,7 @@ export const ComplaintsView: React.FC = () => {
       return;
     }
 
-    await api.complaints.create({
+    const created = await api.complaints.create({
       tripId: activeTrip.id,
       userId: currentUser?.id || 'usr-default',
       userEmail: currentUser?.email,
@@ -126,6 +138,9 @@ export const ComplaintsView: React.FC = () => {
     });
 
     await loadComplaints();
+    if (created) {
+      setSelectedComplaint(created);
+    }
     setIsAddModalOpen(false);
     setTitle('');
     setDescription('');
@@ -134,12 +149,15 @@ export const ComplaintsView: React.FC = () => {
     setAiPrediction(null);
   };
 
-  // Advanced Feature: Workflow Resolution & Arbitration + Email Notification
+  // Advanced Feature: Workflow Resolution & Arbitration + Email Notification + History Entry
   const handleUpdateStatus = async (id: string, newStatus: ComplaintStatus) => {
     const res = await api.complaints.update(id, {
       status: newStatus,
       resolutionNotes: resolutionNoteInput || selectedComplaint?.resolutionNotes,
-      awardedCompensation: awardedCompensationInput || selectedComplaint?.awardedCompensation
+      awardedCompensation: awardedCompensationInput || selectedComplaint?.awardedCompensation,
+      byUserId: currentUser?.id,
+      byUserName: currentUser?.name || 'Support Travel Tracker',
+      byUserRole: currentUser?.role || 'Admin'
     });
 
     if (res?.emailSent) {
@@ -156,11 +174,33 @@ export const ComplaintsView: React.FC = () => {
 
     await loadComplaints();
     if (selectedComplaint && selectedComplaint.id === id) {
+      const updatedHistory: ComplaintHistoryEntry[] = res?.history || [
+        ...(selectedComplaint.history || []),
+        {
+          id: 'hist-' + Date.now(),
+          action: newStatus === 'Résolu' 
+            ? 'Arbitrage Favorable & Résolution' 
+            : newStatus === 'Rejeté' 
+            ? 'Dossier Rejeté & Clôturé' 
+            : 'Prise en charge & Mise en analyse',
+          date: new Date().toISOString(),
+          byUserId: currentUser?.id,
+          byUserName: currentUser?.name || 'Support Travel Tracker',
+          byUserRole: currentUser?.role || 'Admin',
+          previousStatus: selectedComplaint.status,
+          newStatus,
+          note: resolutionNoteInput || selectedComplaint.resolutionNotes || '',
+          awardedCompensation: awardedCompensationInput || selectedComplaint.awardedCompensation || '',
+          emailSent: !!res?.emailSent
+        }
+      ];
+
       setSelectedComplaint(prev => prev ? {
         ...prev,
         status: newStatus,
         resolutionNotes: resolutionNoteInput || prev.resolutionNotes,
-        awardedCompensation: awardedCompensationInput || prev.awardedCompensation
+        awardedCompensation: awardedCompensationInput || prev.awardedCompensation,
+        history: updatedHistory
       } : null);
     }
     setResolutionNoteInput('');
@@ -192,17 +232,81 @@ export const ComplaintsView: React.FC = () => {
     }
   };
 
+  // Build complete chronological timeline / history of treatment
+  const getComplaintTimeline = (complaint: Complaint): ComplaintHistoryEntry[] => {
+    if (complaint.history && complaint.history.length > 0) {
+      return complaint.history;
+    }
+
+    // Synthesize history for complaints created prior to audit log
+    const fallback: ComplaintHistoryEntry[] = [
+      {
+        id: 'init-1',
+        action: 'Création & Dépôt du dossier',
+        date: complaint.createdAt || new Date().toISOString(),
+        byUserName: complaint.userName || 'Voyageur',
+        byUserRole: 'Traveler',
+        newStatus: 'Soumis',
+        note: complaint.description ? (complaint.description.slice(0, 90) + '...') : 'Dépôt initial du litige.',
+        awardedCompensation: complaint.requestedCompensation,
+        emailSent: false
+      }
+    ];
+
+    if (complaint.status !== 'Soumis' || complaint.resolutionNotes || complaint.awardedCompensation) {
+      fallback.push({
+        id: 'upd-2',
+        action: complaint.status === 'Résolu' 
+          ? 'Arbitrage Favorable & Résolution' 
+          : complaint.status === 'Rejeté' 
+          ? 'Dossier Rejeté & Clôturé' 
+          : 'Prise en charge & Mise en analyse',
+        date: complaint.updatedAt || complaint.createdAt,
+        byUserName: 'Organisateur / Support',
+        byUserRole: 'Admin',
+        previousStatus: 'Soumis',
+        newStatus: complaint.status,
+        note: complaint.resolutionNotes || 'Traitement du dossier enregistré.',
+        awardedCompensation: complaint.awardedCompensation || '',
+        emailSent: true
+      });
+    }
+
+    return fallback;
+  };
+
   const canManageComplaints = currentUser?.role === 'Admin' || currentUser?.role === 'Organizer';
-  const canCreateComplaint = currentUser?.role === 'Traveler';
+  const canCreateComplaint = currentUser?.role === 'Traveler' || currentUser?.role === 'Organizer' || currentUser?.role === 'Admin';
   const isTraveler = currentUser?.role === 'Traveler';
 
-  // Confidentialité stricte : un voyageur ne peut voir QUE ses propres réclamations
-  const visibleComplaints = complaints.filter(comp => {
-    if (isTraveler) {
-      return comp.userId === currentUser?.id || (currentUser?.name && comp.userName === currentUser.name);
+  // Check if a complaint was created by the currently logged-in user
+  const isCreatedByCurrentUser = (c: Complaint) => {
+    return c.userId === currentUser?.id || (currentUser?.name && c.userName === currentUser.name);
+  };
+
+  // User-created complaints
+  const myCreatedComplaints = complaints.filter(isCreatedByCurrentUser);
+
+  // Filter based on active tab
+  const tabFilteredComplaints = complaints.filter(c => {
+    if (isTraveler || activeTab === 'my_complaints') {
+      return isCreatedByCurrentUser(c);
     }
-    return true; // Les organisateurs et admins accèdent à toutes les réclamations pour arbitrage
+    if (activeTab === 'pending') {
+      return c.status === 'Soumis' || c.status === "En cours d'analyse";
+    }
+    return true; // 'all' for Admin / Organizer
   });
+
+  // Final filtered list including status filter
+  const visibleComplaints = tabFilteredComplaints.filter(c => {
+    return filterStatus === 'all' || c.status === filterStatus;
+  });
+
+  // Quick stats
+  const myTotalCount = myCreatedComplaints.length;
+  const myInProgressCount = myCreatedComplaints.filter(c => c.status === 'Soumis' || c.status === "En cours d'analyse").length;
+  const myResolvedCount = myCreatedComplaints.filter(c => c.status === 'Résolu').length;
 
   return (
     <div className="space-y-6">
@@ -214,19 +318,19 @@ export const ComplaintsView: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h2 className="text-xl font-bold text-white">Réclamations & Support</h2>
+              <h2 className="text-xl font-bold text-white">Réclamations &amp; Support</h2>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center space-x-1">
                 <Sparkles className="w-3 h-3 text-amber-400" />
-                <span>IA &amp; Notifications Mail</span>
+                <span>IA &amp; Historique de Traitement</span>
               </span>
             </div>
             <p className="text-sm text-slate-400 mt-0.5">
-              Prédiction automatique par IA des types et de l'urgence des litiges avec suivi email en temps réel.
+              Historique complet de traitement, diagnostic IA et liste personnalisée des réclamations créées.
             </p>
           </div>
         </div>
 
-        {canCreateComplaint ? (
+        {canCreateComplaint && (
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="flex items-center space-x-2 px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-rose-600/25 transition-all self-start sm:self-auto"
@@ -234,10 +338,6 @@ export const ComplaintsView: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>Déposer une Réclamation</span>
           </button>
-        ) : (
-          <div className="px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-amber-300 font-semibold self-start sm:self-auto">
-            Mode Arbitrage & Traitement (Réservé Voyageur pour le dépôt)
-          </div>
         )}
       </div>
 
@@ -254,73 +354,165 @@ export const ComplaintsView: React.FC = () => {
         </span>
       </div>
 
+      {/* Quick Summary Cards (Mes réclamations créées) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] text-slate-400 font-medium">Mes réclamations créées</div>
+            <div className="text-lg font-bold text-white mt-0.5">{myTotalCount}</div>
+          </div>
+          <div className="p-2.5 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <FolderOpen className="w-4 h-4" />
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] text-slate-400 font-medium">En cours d'analyse</div>
+            <div className="text-lg font-bold text-amber-400 mt-0.5">{myInProgressCount}</div>
+          </div>
+          <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <Clock className="w-4 h-4" />
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] text-slate-400 font-medium">Résolues &amp; Indemnisées</div>
+            <div className="text-lg font-bold text-emerald-400 mt-0.5">{myResolvedCount}</div>
+          </div>
+          <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
+        </div>
+      </div>
+
       {/* Grid: Tickets List & Details / Resolution Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left Column: Tickets List */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              {['all', 'Soumis', 'En cours d\'analyse', 'Résolu'].map(s => (
-                <button
-                  key={s}
-                  onClick={() => setFilterStatus(s)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-                    filterStatus === s
-                      ? 'bg-rose-600 text-white border-rose-500 font-bold'
-                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                  }`}
-                >
-                  {s === 'all' ? 'Toutes' : s}
-                </button>
-              ))}
+          
+          {/* Main Navigation Tabs: Mes créations vs Toutes vs À traiter */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
+            <div className="flex items-center space-x-1.5 overflow-x-auto">
+              <button
+                onClick={() => setActiveTab('my_complaints')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap ${
+                  activeTab === 'my_complaints'
+                    ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span>Mes Réclamations Créées ({myTotalCount})</span>
+              </button>
+
+              {canManageComplaints && (
+                <>
+                  <button
+                    onClick={() => setActiveTab('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap ${
+                      activeTab === 'all'
+                        ? 'bg-sky-600 text-white shadow-md shadow-sky-600/30'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <Inbox className="w-3.5 h-3.5" />
+                    <span>Toutes ({complaints.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('pending')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 whitespace-nowrap ${
+                      activeTab === 'pending'
+                        ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>À Traiter ({complaints.filter(c => c.status === 'Soumis' || c.status === "En cours d'analyse").length})</span>
+                  </button>
+                </>
+              )}
             </div>
-            <span className="text-xs text-slate-500">{visibleComplaints.length} dossier(s)</span>
+
+            <span className="text-xs text-slate-500 self-end sm:self-auto font-mono">
+              {visibleComplaints.length} affichée(s)
+            </span>
           </div>
 
-          {/* Bannière de confidentialité voyageur */}
-          {isTraveler && (
-            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400 flex items-center space-x-2">
+          {/* Secondary Filter: Filter by Status */}
+          <div className="flex items-center space-x-1.5 overflow-x-auto pb-1">
+            {['all', 'Soumis', 'En cours d\'analyse', 'Résolu', 'Rejeté'].map(s => (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(s)}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors whitespace-nowrap ${
+                  filterStatus === s
+                    ? 'bg-slate-800 text-white border-slate-600 font-bold'
+                    : 'bg-slate-950/60 text-slate-500 border-slate-800 hover:text-slate-300'
+                }`}
+              >
+                {s === 'all' ? 'Tous les statuts' : s}
+              </button>
+            ))}
+          </div>
+
+          {/* Confidentiality info banner */}
+          {activeTab === 'my_complaints' && (
+            <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-400 flex items-center space-x-2">
               <Lock className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              <span>Espace confidentiel : seules vos réclamations personnelles vous sont visibles. Vous recevrez un email à chaque changement de statut.</span>
+              <span>Vos réclamations créées : vous suivez ici l'historique complet des arbitrages et recevez des emails de notification.</span>
             </div>
           )}
 
+          {/* Complaints List Cards */}
           <div className="space-y-3">
             {visibleComplaints.length === 0 ? (
               <div className="text-center py-12 p-6 rounded-2xl bg-slate-900/40 border border-dashed border-slate-800 space-y-3">
                 <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
                 <h4 className="text-sm font-semibold text-slate-300">
-                  {isTraveler ? 'Vous n\'avez aucune réclamation en cours' : 'Aucune réclamation enregistrée pour ce voyage'}
+                  {activeTab === 'my_complaints'
+                    ? 'Vous n\'avez créé aucune réclamation dans cette catégorie'
+                    : 'Aucune réclamation trouvée pour ce filtre'}
                 </h4>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Tout se déroule parfaitement sur ce séjour. En cas de vol retardé ou imprévu d'hôtel, déposez un ticket.
+                  En cas de vol retardé, d'annulation d'hôtel ou de frais imprévu, utilisez le bouton « Déposer une Réclamation ».
                 </p>
               </div>
             ) : (
-              visibleComplaints
-                .filter(c => filterStatus === 'all' || c.status === filterStatus)
-                .map(comp => (
+              visibleComplaints.map(comp => {
+                const isMine = isCreatedByCurrentUser(comp);
+                const timeline = getComplaintTimeline(comp);
+                const isSelected = selectedComplaint?.id === comp.id;
+
+                return (
                   <div
                     key={comp.id}
                     onClick={() => setSelectedComplaint(comp)}
                     className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-3 ${
-                      selectedComplaint?.id === comp.id
-                        ? 'bg-slate-800/90 border-rose-500 ring-1 ring-rose-500/50 shadow-lg'
+                      isSelected
+                        ? 'bg-slate-800/95 border-rose-500 ring-1 ring-rose-500/50 shadow-lg'
                         : 'bg-slate-900 border-slate-800 hover:border-slate-700'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${getPriorityColor(comp.priority)}`}>
                             {comp.priority}
                           </span>
                           <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
                             {comp.category}
                           </span>
+                          {isMine && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold flex items-center space-x-1">
+                              <span>👤 Créé par vous</span>
+                            </span>
+                          )}
                         </div>
-                        <h4 className="text-sm font-bold text-white">{comp.title}</h4>
+                        <h4 className="text-sm font-bold text-white mt-1">{comp.title}</h4>
                       </div>
 
                       <div className="flex-shrink-0">
@@ -333,30 +525,43 @@ export const ComplaintsView: React.FC = () => {
                     </p>
 
                     <div className="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-800">
-                      <div className="flex items-center space-x-1.5">
-                        <User className="w-3 h-3 text-slate-400" />
-                        <span>{comp.userName}</span>
-                        {comp.userEmail && (
-                          <span className="text-slate-600 font-mono text-[10px]">({comp.userEmail})</span>
-                        )}
+                      <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1">
+                          <User className="w-3 h-3 text-slate-400" />
+                          <span>{comp.userName}</span>
+                        </div>
+                        <span className="text-slate-600">•</span>
+                        <div className="flex items-center space-x-1 text-sky-400 font-medium">
+                          <History className="w-3 h-3" />
+                          <span>{timeline.length} étape(s) d'historique</span>
+                        </div>
                       </div>
+
                       <div className="flex items-center space-x-1">
                         <Calendar className="w-3 h-3 text-slate-400" />
                         <span>Incident : {comp.incidentDate}</span>
                       </div>
                     </div>
                   </div>
-                ))
+                );
+              })
             )}
           </div>
         </div>
 
-        {/* Right Column: Detail & Arbitration Panel */}
+        {/* Right Column: Detail & Full Treatment History / Timeline Panel */}
         <div className="lg:col-span-1 space-y-4">
           {selectedComplaint ? (
             <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
               <div className="border-b border-slate-800 pb-3">
-                <span className="text-[10px] font-mono text-slate-500 uppercase">Dossier #{selectedComplaint.id}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase">Dossier #{selectedComplaint.id}</span>
+                  {isCreatedByCurrentUser(selectedComplaint) && (
+                    <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full font-bold">
+                      Votre réclamation
+                    </span>
+                  )}
+                </div>
                 <h3 className="text-base font-bold text-white mt-1">{selectedComplaint.title}</h3>
                 <div className="mt-2 flex items-center justify-between">
                   <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${getPriorityColor(selectedComplaint.priority)}`}>
@@ -369,7 +574,7 @@ export const ComplaintsView: React.FC = () => {
               {/* Traveler & Email Info */}
               <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs space-y-1">
                 <div className="flex items-center justify-between text-slate-400">
-                  <span>Déclarant :</span>
+                  <span>Auteur du signalement :</span>
                   <span className="font-semibold text-white">{selectedComplaint.userName}</span>
                 </div>
                 {selectedComplaint.userEmail && (
@@ -385,7 +590,7 @@ export const ComplaintsView: React.FC = () => {
 
               {/* Description */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-400">Description du voyageur :</label>
+                <label className="text-xs font-semibold text-slate-400">Description circonstanciée :</label>
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 leading-relaxed">
                   {selectedComplaint.description}
                 </div>
@@ -428,13 +633,95 @@ export const ComplaintsView: React.FC = () => {
                 </div>
               )}
 
+              {/* Historique de Traitement (Timeline d'audit étape par étape) */}
+              <div className="space-y-3 pt-3 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-white flex items-center space-x-1.5">
+                    <History className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Historique de Traitement ({getComplaintTimeline(selectedComplaint).length} étapes)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500">Audit Trail</span>
+                </div>
+
+                <div className="relative pl-5 space-y-3 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800">
+                  {getComplaintTimeline(selectedComplaint).map((entry, idx) => (
+                    <div key={entry.id || idx} className="relative group">
+                      {/* Stepper Dot */}
+                      <div className={`absolute -left-5 top-1 w-4 h-4 rounded-full flex items-center justify-center border text-[9px] ${
+                        entry.newStatus === 'Résolu'
+                          ? 'bg-emerald-950 border-emerald-500 text-emerald-400'
+                          : entry.newStatus === 'Rejeté'
+                          ? 'bg-rose-950 border-rose-500 text-rose-400'
+                          : entry.newStatus === "En cours d'analyse"
+                          ? 'bg-amber-950 border-amber-500 text-amber-400'
+                          : 'bg-sky-950 border-sky-500 text-sky-400'
+                      }`}>
+                        {entry.newStatus === 'Résolu' ? '✓' : entry.newStatus === 'Rejeté' ? '✕' : entry.newStatus === "En cours d'analyse" ? '⏳' : '●'}
+                      </div>
+
+                      <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-2.5 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="font-bold text-white text-[11px]">{entry.action}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {new Date(entry.date).toLocaleString('fr-FR', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center space-x-1.5 text-[10px] text-slate-400">
+                          <UserCheck className="w-3 h-3 text-slate-500" />
+                          <span>Par : <strong className="text-slate-300">{entry.byUserName}</strong> ({entry.byUserRole || 'Support'})</span>
+                        </div>
+
+                        {entry.previousStatus && entry.previousStatus !== entry.newStatus ? (
+                          <div className="flex items-center space-x-1 text-[10px]">
+                            <span className="text-slate-500">Statut :</span>
+                            <span className="text-slate-400">{entry.previousStatus}</span>
+                            <ArrowRight className="w-2.5 h-2.5 text-slate-600" />
+                            <span className="font-bold text-sky-300">{entry.newStatus}</span>
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-slate-400">
+                            Statut : <span className="font-semibold text-sky-300">{entry.newStatus}</span>
+                          </div>
+                        )}
+
+                        {entry.awardedCompensation && (
+                          <div className="p-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-semibold flex items-center space-x-1">
+                            <span>💰 Dédommagement accordé :</span>
+                            <span>{entry.awardedCompensation}</span>
+                          </div>
+                        )}
+
+                        {entry.note && (
+                          <p className="text-slate-300 italic text-[10px] bg-slate-900/60 p-2 rounded-lg border border-slate-800 leading-relaxed">
+                            « {entry.note} »
+                          </p>
+                        )}
+
+                        {entry.emailSent && (
+                          <div className="text-[10px] text-emerald-400 flex items-center space-x-1 pt-0.5">
+                            <Mail className="w-3 h-3" />
+                            <span>Notification par email expédiée au voyageur</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Admin / Organizer Actions */}
               {canManageComplaints && (
                 <div className="space-y-3 pt-3 border-t border-slate-800">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-amber-300 flex items-center space-x-1">
                       <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Arbitrage (Email automatique au voyageur)</span>
+                      <span>Arbitrage (Notification email automatique)</span>
                     </label>
                     <Mail className="w-3.5 h-3.5 text-sky-400" />
                   </div>
@@ -451,7 +738,7 @@ export const ComplaintsView: React.FC = () => {
                     rows={2}
                     value={resolutionNoteInput}
                     onChange={e => setResolutionNoteInput(e.target.value)}
-                    placeholder="Motif de la décision ou instructions d'indemnisation (inclus dans l'email)..."
+                    placeholder="Motif de la décision ou instructions d'indemnisation (consigné dans l'historique et l'email)..."
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
                   />
 
@@ -481,7 +768,7 @@ export const ComplaintsView: React.FC = () => {
           ) : (
             <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 text-center space-y-2 text-xs text-slate-500">
               <FileText className="w-8 h-8 mx-auto text-slate-600" />
-              <p>Sélectionnez une réclamation pour voir les détails, justificatifs et timeline d'arbitrage.</p>
+              <p>Sélectionnez une réclamation pour voir les détails, l'historique de traitement et les actions d'arbitrage.</p>
             </div>
           )}
         </div>

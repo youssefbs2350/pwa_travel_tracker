@@ -689,8 +689,11 @@ export const api = {
       return localComp;
     },
 
-    async update(id: string, updates: Partial<Complaint>): Promise<any> {
-      await db.complaints.update(id, updates);
+    async update(id: string, updates: Partial<Complaint> & { byUserId?: string; byUserName?: string; byUserRole?: string; [key: string]: any }): Promise<any> {
+      const { byUserId, byUserName, byUserRole, ...complaintFields } = updates;
+      if (Object.keys(complaintFields).length > 0) {
+        await db.complaints.update(id, complaintFields);
+      }
       try {
         const res = await fetch(`/api/complaints/${id}`, {
           method: 'PUT',
@@ -699,13 +702,16 @@ export const api = {
         });
         if (res.ok) {
           const data = await res.json();
+          if (data) {
+            await db.complaints.put({ ...data, id: data._id || data.id });
+          }
           return data;
         }
       } catch {
         await db.syncQueue.add({
           type: 'UPDATE',
           collection: 'complaints',
-          data: { id, ...updates },
+          data: { id, ...complaintFields },
           timestamp: new Date().toISOString()
         });
       }

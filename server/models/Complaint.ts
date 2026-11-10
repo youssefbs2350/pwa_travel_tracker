@@ -14,6 +14,7 @@ export interface IComplaint extends Document {
   awardedCompensation?: string;
   resolutionNotes?: string;
   incidentDate: string;
+  history?: any[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,6 +45,24 @@ const ComplaintSchema = new Schema<IComplaint>({
   awardedCompensation: { type: String, default: '' },
   resolutionNotes: { type: String, default: '' },
   incidentDate: { type: String, default: '' },
+  history: {
+    type: [
+      {
+        id: { type: String },
+        action: { type: String },
+        date: { type: String },
+        byUserId: { type: String },
+        byUserName: { type: String },
+        byUserRole: { type: String },
+        previousStatus: { type: String },
+        newStatus: { type: String },
+        note: { type: String, default: '' },
+        awardedCompensation: { type: String, default: '' },
+        emailSent: { type: Boolean, default: false }
+      }
+    ],
+    default: []
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

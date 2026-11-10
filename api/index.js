@@ -28742,6 +28742,24 @@ var ComplaintSchema = new Schema7({
   awardedCompensation: { type: String, default: "" },
   resolutionNotes: { type: String, default: "" },
   incidentDate: { type: String, default: "" },
+  history: {
+    type: [
+      {
+        id: { type: String },
+        action: { type: String },
+        date: { type: String },
+        byUserId: { type: String },
+        byUserName: { type: String },
+        byUserRole: { type: String },
+        previousStatus: { type: String },
+        newStatus: { type: String },
+        note: { type: String, default: "" },
+        awardedCompensation: { type: String, default: "" },
+        emailSent: { type: Boolean, default: false }
+      }
+    ],
+    default: []
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
@@ -43351,6 +43369,19 @@ router7.post("/", async (req, res) => {
       } catch {
       }
     }
+    const initialHistoryEntry = {
+      id: "hist-" + Date.now(),
+      action: "Cr\xE9ation & D\xE9p\xF4t du dossier",
+      date: (/* @__PURE__ */ new Date()).toISOString(),
+      byUserId: complaintData.userId,
+      byUserName: complaintData.userName || "Voyageur",
+      byUserRole: "Traveler",
+      newStatus: "Soumis",
+      note: complaintData.description ? complaintData.description.length > 120 ? complaintData.description.slice(0, 120) + "..." : complaintData.description : "D\xE9p\xF4t initial de la r\xE9clamation avec analyse IA.",
+      awardedCompensation: complaintData.requestedCompensation || "",
+      emailSent: false
+    };
+    complaintData.history = [initialHistoryEntry];
     const complaint = new ComplaintModel(complaintData);
     await complaint.save();
     res.status(201).json(complaint);
@@ -43360,7 +43391,7 @@ router7.post("/", async (req, res) => {
 });
 router7.put("/:id", async (req, res) => {
   try {
-    const { status, awardedCompensation, resolutionNotes } = req.body;
+    const { status, awardedCompensation, resolutionNotes, byUserId, byUserName, byUserRole } = req.body;
     const existing = await ComplaintModel.findById(req.params.id);
     if (!existing) return res.status(404).json({ error: "R\xE9clamation non trouv\xE9e" });
     const previousStatus = existing.status;
@@ -43369,7 +43400,6 @@ router7.put("/:id", async (req, res) => {
     if (awardedCompensation !== void 0) existing.awardedCompensation = awardedCompensation;
     if (resolutionNotes !== void 0) existing.resolutionNotes = resolutionNotes;
     existing.updatedAt = /* @__PURE__ */ new Date();
-    await existing.save();
     let emailSent = false;
     let emailStatusMessage = "";
     if (isStatusChanged) {
@@ -43417,6 +43447,31 @@ router7.put("/:id", async (req, res) => {
         emailStatusMessage = "Aucun email trouv\xE9 pour ce voyageur.";
       }
     }
+    let historyAction = "Mise \xE0 jour du dossier";
+    if (existing.status === "R\xE9solu") {
+      historyAction = "Arbitrage Favorable & R\xE9solution";
+    } else if (existing.status === "Rejet\xE9") {
+      historyAction = "Dossier Rejet\xE9 & Cl\xF4tur\xE9";
+    } else if (existing.status === "En cours d'analyse") {
+      historyAction = "Prise en charge & Mise en analyse";
+    }
+    if (!Array.isArray(existing.history)) {
+      existing.history = [];
+    }
+    existing.history.push({
+      id: "hist-" + Date.now(),
+      action: historyAction,
+      date: (/* @__PURE__ */ new Date()).toISOString(),
+      byUserId: byUserId || "",
+      byUserName: byUserName || "Organisateur / Support",
+      byUserRole: byUserRole || "Admin",
+      previousStatus,
+      newStatus: existing.status,
+      note: resolutionNotes || existing.resolutionNotes || "",
+      awardedCompensation: awardedCompensation || existing.awardedCompensation || "",
+      emailSent
+    });
+    await existing.save();
     res.json({
       ...existing.toObject(),
       emailSent,
