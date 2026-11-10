@@ -17,6 +17,14 @@ export interface IUser extends Document {
     interests: string[];
     theme: string;
   };
+  emergencyInfo?: {
+    bloodType?: string;
+    allergies?: string;
+    emergencyContact?: {
+      name?: string;
+      phone?: string;
+    };
+  };
   createdAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
@@ -36,6 +44,14 @@ const UserSchema = new Schema<IUser>({
     travelPace: { type: String, enum: ['Relaxed', 'Balanced', 'Intense'], default: 'Balanced' },
     interests: { type: [String], default: ['Culture', 'Gastronomie'] },
     theme: { type: String, default: 'dark' }
+  },
+  emergencyInfo: {
+    bloodType: { type: String, default: '' },
+    allergies: { type: String, default: '' },
+    emergencyContact: {
+      name: { type: String, default: '' },
+      phone: { type: String, default: '' }
+    }
   },
   createdAt: { type: Date, default: Date.now }
 });

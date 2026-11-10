@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Shield, 
   Users, 
@@ -22,7 +22,7 @@ import { Modal } from '../common/Modal';
 import { AvatarPicker, AVATAR_PRESETS } from '../common/AvatarPicker';
 
 export const AdminUsersManagementView: React.FC = () => {
-  const { currentUser, allUsers, isAdmin, updateUserRole, register } = useAuth();
+  const { currentUser, allUsers, isAdmin, updateUserRole, register, refreshUsers } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -30,6 +30,12 @@ export const AdminUsersManagementView: React.FC = () => {
   const [notification, setNotification] = useState<{ text: string; error?: boolean } | null>(null);
   const [expandedEmergency, setExpandedEmergency] = useState<string | null>(null);
   const [showEmergencyPanel, setShowEmergencyPanel] = useState(false);
+
+  useEffect(() => {
+    if (isAdmin && refreshUsers) {
+      refreshUsers();
+    }
+  }, [isAdmin, showEmergencyPanel]);
 
   // New user form state
   const [name, setName] = useState('');

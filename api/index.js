@@ -28521,7 +28521,7 @@ var require_jsonwebtoken = __commonJS({
 var import_express10 = __toESM(require_express2(), 1);
 var import_cors = __toESM(require_lib3(), 1);
 var import_dotenv3 = __toESM(require_dist4(), 1);
-import mongoose12 from "mongoose";
+import mongoose13 from "mongoose";
 
 // server/db.ts
 var import_dotenv = __toESM(require_dist4(), 1);
@@ -28572,6 +28572,14 @@ var UserSchema = new Schema({
     travelPace: { type: String, enum: ["Relaxed", "Balanced", "Intense"], default: "Balanced" },
     interests: { type: [String], default: ["Culture", "Gastronomie"] },
     theme: { type: String, default: "dark" }
+  },
+  emergencyInfo: {
+    bloodType: { type: String, default: "" },
+    allergies: { type: String, default: "" },
+    emergencyContact: {
+      name: { type: String, default: "" },
+      phone: { type: String, default: "" }
+    }
   },
   createdAt: { type: Date, default: Date.now }
 });
@@ -42669,7 +42677,7 @@ router.post("/reset-password", async (req, res) => {
 });
 router.put("/:id", async (req, res) => {
   try {
-    const { role, preferences, requesterRole, name: name2, avatar } = req.body;
+    const { role, preferences, requesterRole, name: name2, avatar, emergencyInfo } = req.body;
     const targetId = req.params.id;
     if (role && requesterRole !== "Admin") {
       return res.status(403).json({
@@ -42681,6 +42689,7 @@ router.put("/:id", async (req, res) => {
     if (preferences) updates.preferences = preferences;
     if (name2) updates.name = name2;
     if (avatar) updates.avatar = avatar;
+    if (emergencyInfo) updates.emergencyInfo = emergencyInfo;
     const user = await UserModel.findByIdAndUpdate(targetId, updates, { new: true }).select("-password");
     if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
     res.json(user);
@@ -42704,6 +42713,21 @@ var users_default = router;
 
 // server/routes/trips.ts
 var import_express2 = __toESM(require_express2(), 1);
+
+// server/models/Message.ts
+import mongoose9, { Schema as Schema8 } from "mongoose";
+var MessageSchema = new Schema8({
+  tripId: { type: String, required: true, index: true },
+  userId: { type: String, required: true },
+  userName: { type: String, required: true },
+  userAvatar: { type: String, default: "" },
+  message: { type: String, required: true, trim: true },
+  timestamp: { type: Number, default: Date.now },
+  createdAt: { type: Date, default: Date.now }
+});
+var MessageModel = mongoose9.models.Message || mongoose9.model("Message", MessageSchema);
+
+// server/routes/trips.ts
 var router2 = (0, import_express2.Router)();
 router2.get("/", async (req, res) => {
   try {
@@ -43031,14 +43055,44 @@ R\xE9ponds STRICTEMENT avec un objet JSON sans markdown, respectant ce format :
     res.status(500).json({ error: err.message });
   }
 });
+router2.get("/:id/messages", async (req, res) => {
+  try {
+    const tripId = req.params.id;
+    const messages = await MessageModel.find({ tripId }).sort({ timestamp: 1 });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router2.post("/:id/messages", async (req, res) => {
+  try {
+    const tripId = req.params.id;
+    const { userId, userName, userAvatar, message, timestamp } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: "Le contenu du message est requis." });
+    }
+    const newMsg = new MessageModel({
+      tripId,
+      userId: userId || "usr-anonymous",
+      userName: userName || "Voyageur",
+      userAvatar: userAvatar || "",
+      message: message.trim(),
+      timestamp: timestamp || Date.now()
+    });
+    await newMsg.save();
+    res.status(201).json(newMsg);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 var trips_default = router2;
 
 // server/routes/places.ts
 var import_express3 = __toESM(require_express2(), 1);
-import mongoose9 from "mongoose";
+import mongoose10 from "mongoose";
 var router3 = (0, import_express3.Router)();
 function buildIdFilter(id) {
-  if (mongoose9.Types.ObjectId.isValid(id)) {
+  if (mongoose10.Types.ObjectId.isValid(id)) {
     return { $or: [{ _id: id }, { id }] };
   }
   return { id };
@@ -43102,10 +43156,10 @@ var places_default = router3;
 
 // server/routes/activities.ts
 var import_express4 = __toESM(require_express2(), 1);
-import mongoose11 from "mongoose";
+import mongoose12 from "mongoose";
 
 // server/services/alertChecker.ts
-import mongoose10 from "mongoose";
+import mongoose11 from "mongoose";
 function timeToMinutes(t) {
   if (!t || !t.includes(":")) return 540;
   const [h, m] = t.split(":").map(Number);
@@ -43126,7 +43180,7 @@ async function checkAndSendDueActivityAlerts() {
   const details = [];
   let alertedCount = 0;
   for (const act of activities) {
-    const tripFilter = mongoose10.Types.ObjectId.isValid(act.tripId) ? { $or: [{ _id: act.tripId }, { id: act.tripId }] } : { id: act.tripId };
+    const tripFilter = mongoose11.Types.ObjectId.isValid(act.tripId) ? { $or: [{ _id: act.tripId }, { id: act.tripId }] } : { id: act.tripId };
     const trip = await TripModel.findOne(tripFilter);
     let activityDateStr = null;
     if (act.date) {
@@ -43152,7 +43206,7 @@ async function checkAndSendDueActivityAlerts() {
     const place = act.placeId ? await PlaceModel.findOne({ id: act.placeId }) : null;
     const recipientsMap = /* @__PURE__ */ new Map();
     if (trip?.userId) {
-      const creatorFilter = mongoose10.Types.ObjectId.isValid(trip.userId) ? { $or: [{ _id: trip.userId }, { id: trip.userId }] } : { id: trip.userId };
+      const creatorFilter = mongoose11.Types.ObjectId.isValid(trip.userId) ? { $or: [{ _id: trip.userId }, { id: trip.userId }] } : { id: trip.userId };
       const creator = await UserModel.findOne(creatorFilter);
       if (creator?.email) {
         recipientsMap.set(creator.email.toLowerCase().trim(), creator.name);
@@ -43216,7 +43270,7 @@ function minutesToTime(totalMin) {
   return `${h}:${m}`;
 }
 function buildIdFilter2(id) {
-  if (mongoose11.Types.ObjectId.isValid(id)) {
+  if (mongoose12.Types.ObjectId.isValid(id)) {
     return { $or: [{ _id: id }, { id }] };
   }
   return { id };
@@ -43791,7 +43845,7 @@ app.use(async (req, res, next) => {
   next();
 });
 var healthHandler = (_req, res) => {
-  const isDbConnected = mongoose12.connection.readyState === 1;
+  const isDbConnected = mongoose13.connection.readyState === 1;
   res.json({
     status: "ok",
     service: "Travel Tracker MongoDB API",

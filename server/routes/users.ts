@@ -331,7 +331,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
 // PUT update user (Role change strictly restricted to Admin)
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const { role, preferences, requesterRole, name, avatar } = req.body;
+    const { role, preferences, requesterRole, name, avatar, emergencyInfo } = req.body;
     const targetId = req.params.id;
 
     if (role && requesterRole !== 'Admin') {
@@ -345,6 +345,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (preferences) updates.preferences = preferences;
     if (name) updates.name = name;
     if (avatar) updates.avatar = avatar;
+    if (emergencyInfo) updates.emergencyInfo = emergencyInfo;
 
     const user = await UserModel.findByIdAndUpdate(targetId, updates, { new: true }).select('-password');
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });

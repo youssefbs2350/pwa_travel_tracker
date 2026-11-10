@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { TripModel } from '../models/Trip';
 import { PlaceModel } from '../models/Place';
 import { ActivityModel } from '../models/Activity';
+import { MessageModel } from '../models/Message';
 
 const router = Router();
 
@@ -384,6 +385,44 @@ Réponds STRICTEMENT avec un objet JSON sans markdown, respectant ce format :
     const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
     const parsed = JSON.parse(text.replace(/\`\`\`json|\`\`\`/g, '').trim());
     res.json(parsed);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+
+// GET /:id/messages : Récupère les messages échangés entre les participants du voyage
+router.get('/:id/messages', async (req: Request, res: Response) => {
+  try {
+    const tripId = req.params.id;
+    const messages = await MessageModel.find({ tripId }).sort({ timestamp: 1 });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// POST /:id/messages : Envoie un message pour ce voyage
+router.post('/:id/messages', async (req: Request, res: Response) => {
+  try {
+    const tripId = req.params.id;
+    const { userId, userName, userAvatar, message, timestamp } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Le contenu du message est requis.' });
+    }
+
+    const newMsg = new MessageModel({
+      tripId,
+      userId: userId || 'usr-anonymous',
+      userName: userName || 'Voyageur',
+      userAvatar: userAvatar || '',
+      message: message.trim(),
+      timestamp: timestamp || Date.now()
+    });
+
+    await newMsg.save();
+    res.status(201).json(newMsg);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

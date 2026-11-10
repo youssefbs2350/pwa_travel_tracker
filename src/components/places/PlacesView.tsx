@@ -353,7 +353,18 @@ export const PlacesView: React.FC = () => {
       }
     }));
 
-    setRealSuggestions(results.filter(r => r !== null && r.name.length > 1) as typeof realSuggestions);
+    // Dédupliquer les suggestions pour éviter tout lieu redondant
+    const uniqueSugs: typeof realSuggestions = [];
+    const seenSugKeys = new Set<string>();
+    for (const r of results) {
+      if (!r || !r.name || r.name.length < 2) continue;
+      const k = r.name.toLowerCase().trim();
+      if (!seenSugKeys.has(k) && !places.some(p => p.name.toLowerCase().trim() === k)) {
+        seenSugKeys.add(k);
+        uniqueSugs.push(r);
+      }
+    }
+    setRealSuggestions(uniqueSugs);
     setLoadingRealSuggestions(false);
   };
 

@@ -18,6 +18,7 @@ export class TravelTrackerDB extends Dexie {
   memories!: Table<Memory, string>;
   reviews!: Table<Review, string>;
   complaints!: Table<Complaint, string>;
+  messages!: Table<any, string>;
   syncQueue!: Table<SyncItem, number>;
 
   constructor() {
@@ -33,47 +34,67 @@ export class TravelTrackerDB extends Dexie {
       complaints: 'id, tripId, userId, status, priority',
       syncQueue: '++id, collection, timestamp'
     });
+
+    this.version(3).stores({
+      users: 'id, email, role',
+      trips: 'id, userId, status, destination, startDate',
+      places: 'id, tripId, category, rating',
+      activities: 'id, tripId, date, status, orderIndex',
+      expenses: 'id, tripId, category, date',
+      memories: 'id, tripId, date',
+      reviews: 'id, tripId, placeId, rating',
+      complaints: 'id, tripId, userId, status, priority',
+      messages: 'id, tripId, userId, timestamp',
+      syncQueue: '++id, collection, timestamp'
+    });
   }
 }
 
 export const db = new TravelTrackerDB();
 
 // Sync initial data from MongoDB API to local IndexedDB for Offline-First experience
+async function safeFetchCollection(url: string, headers: Record<string, string> = {}): Promise<any[]> {
+  try {
+    const res = await fetch(url, { headers });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+// Sync initial data from MongoDB API to local IndexedDB with robust error handling
 export async function syncFromMongoDB(): Promise<boolean> {
   try {
-    const res = await fetch('/api/trips');
-    if (!res.ok) return false;
-
-    const [tripsRes, usersRes, placesRes, activitiesRes, expensesRes, memoriesRes, complaintsRes, reviewsRes] = await Promise.all([
-      fetch('/api/trips').then(r => r.json()),
-      fetch('/api/users').then(r => r.json()),
-      fetch('/api/places').then(r => r.json()),
-      fetch('/api/activities').then(r => r.json()),
-      fetch('/api/expenses').then(r => r.json()),
-      fetch('/api/memories').then(r => r.json()),
-      fetch('/api/complaints').then(r => r.json()),
-      fetch('/api/memories/reviews').then(r => r.json())
-    ]);
-
     // Format _id from MongoDB into id if necessary
     const formatItem = (item: any) => ({
       ...item,
       id: item._id ? item._id.toString() : item.id
     });
 
-    if (tripsRes?.length) await db.trips.bulkPut(tripsRes.map(formatItem));
-    if (usersRes?.length) await db.users.bulkPut(usersRes.map(formatItem));
-    if (placesRes?.length) await db.places.bulkPut(placesRes.map(formatItem));
-    if (activitiesRes?.length) await db.activities.bulkPut(activitiesRes.map(formatItem));
-    if (expensesRes?.length) await db.expenses.bulkPut(expensesRes.map(formatItem));
-    if (memoriesRes?.length) await db.memories.bulkPut(memoriesRes.map(formatItem));
-    if (complaintsRes?.length) await db.complaints.bulkPut(complaintsRes.map(formatItem));
-    if (reviewsRes?.length) await db.reviews.bulkPut(reviewsRes.map(formatItem));
+    const [trips, places, activities, expenses, memories, complaints, reviews] = await Promise.all([
+      safeFetchCollection('/api/trips'),
+      safeFetchCollection('/api/places'),
+      safeFetchCollection('/api/activities'),
+      safeFetchCollection('/api/expenses'),
+      safeFetchCollection('/api/memories'),
+      safeFetchCollection('/api/complaints'),
+      safeFetchCollection('/api/memories/reviews')
+    ]);
+
+    if (trips.length > 0) await db.trips.bulkPut(trips.map(formatItem));
+    if (places.length > 0) await db.places.bulkPut(places.map(formatItem));
+    if (activities.length > 0) await db.activities.bulkPut(activities.map(formatItem));
+    if (expenses.length > 0) await db.expenses.bulkPut(expenses.map(formatItem));
+    if (memories.length > 0) await db.memories.bulkPut(memories.map(formatItem));
+    if (complaints.length > 0) await db.complaints.bulkPut(complaints.map(formatItem));
+    if (reviews.length > 0) await db.reviews.bulkPut(reviews.map(formatItem));
 
     console.log('[Offline Engine] IndexedDB synchronisé avec succès depuis MongoDB !');
-    return true;
+    return trips.length > 0;
   } catch (err) {
-    console.warn('[Offline Engine] Impossible de contacter MongoDB (mode hors-ligne actif ou réseau indisponible). Données locales conservées.');
+    console.warn('[Offline Engine] Mode hors-ligne actif. Données locales conservées.');
     return false;
   }
 }

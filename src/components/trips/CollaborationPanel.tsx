@@ -107,14 +107,18 @@ export const CollaborationPanel: React.FC<CollaborationPanelProps> = ({
     }, 80);
   };
 
-  const handleSendMessage = (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!messageInput.trim()) return;
 
-    const newMsg = collaborationService.sendMessage(messageInput.trim());
+    const text = messageInput.trim();
+    setMessageInput('');
+    const newMsg = await collaborationService.sendMessage(text);
     if (newMsg) {
-      setMessages(prev => [...prev, newMsg]);
-      setMessageInput('');
+      setMessages(prev => {
+        if (prev.some(m => m.id === newMsg.id)) return prev;
+        return [...prev, newMsg];
+      });
       scrollToBottom();
     }
   };

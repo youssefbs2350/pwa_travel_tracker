@@ -18,6 +18,7 @@ interface AuthContextType {
   updateUserRole: (targetUserId: string, newRole: UserRole) => Promise<{ success: boolean; message?: string }>;
   updatePreferences: (prefs: Partial<User['preferences']>) => Promise<void>;
   updateEmergencyInfo: (info: EmergencyInfo) => Promise<void>;
+  refreshUsers: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -428,7 +429,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateUserRole,
         updatePreferences,
         updateEmergencyInfo,
-        updateAvatar
+        updateAvatar,
+        refreshUsers: loadAdminUsers
       }}
     >
       {children}
