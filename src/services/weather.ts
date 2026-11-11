@@ -79,6 +79,8 @@ export function getCityCoordinates(destination?: string): { lat: number; lon: nu
   return { lat: 48.8566, lon: 2.3522 };
 }
 
+import { getOrFetchWeather } from '../utils/staticDataCache';
+
 // Cache mémoire pour éviter les requêtes en boucle
 const weatherCache = new Map<string, ActivityWeatherData>();
 
@@ -101,80 +103,72 @@ export async function fetchActivityWeather(
     lon = coords.lon;
   }
 
-  const roundedLat = lat.toFixed(2);
-  const roundedLon = lon.toFixed(2);
   const todayStr = new Date().toISOString().split('T')[0];
   const dateKey = targetDate || todayStr;
-  const cacheKey = `${roundedLat},${roundedLon},${dateKey}`;
 
-  if (weatherCache.has(cacheKey)) {
-    return weatherCache.get(cacheKey)!;
-  }
+  return getOrFetchWeather<ActivityWeatherData>(lat, lon, dateKey, async () => {
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min&current_weather=true&timezone=auto`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-  try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weathercode,temperature_2m_max,temperature_2m_min&current_weather=true&timezone=auto`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      let temp = Math.round(data.current_weather?.temperature ?? 20);
+      let tempMax = temp;
+      let tempMin = Math.max(0, temp - 5);
+      let weatherCode = data.current_weather?.weathercode ?? 0;
 
-    const data = await res.json();
-    let temp = Math.round(data.current_weather?.temperature ?? 20);
-    let tempMax = temp;
-    let tempMin = Math.max(0, temp - 5);
-    let weatherCode = data.current_weather?.weathercode ?? 0;
-
-    if (data.daily && Array.isArray(data.daily.time)) {
-      const idx = data.daily.time.indexOf(dateKey);
-      if (idx !== -1) {
-        tempMax = Math.round(data.daily.temperature_2m_max[idx]);
-        tempMin = Math.round(data.daily.temperature_2m_min[idx]);
-        temp = tempMax;
-        weatherCode = data.daily.weathercode[idx];
-      } else if (data.daily.temperature_2m_max?.[0] !== undefined) {
-        tempMax = Math.round(data.daily.temperature_2m_max[0]);
-        tempMin = Math.round(data.daily.temperature_2m_min[0]);
-        temp = tempMax;
-        weatherCode = data.daily.weathercode[0];
+      if (data.daily && Array.isArray(data.daily.time)) {
+        const idx = data.daily.time.indexOf(dateKey);
+        if (idx !== -1) {
+          tempMax = Math.round(data.daily.temperature_2m_max[idx]);
+          tempMin = Math.round(data.daily.temperature_2m_min[idx]);
+          temp = tempMax;
+          weatherCode = data.daily.weathercode[idx];
+        } else if (data.daily.temperature_2m_max?.[0] !== undefined) {
+          tempMax = Math.round(data.daily.temperature_2m_max[0]);
+          tempMin = Math.round(data.daily.temperature_2m_min[0]);
+          temp = tempMax;
+          weatherCode = data.daily.weathercode[0];
+        }
       }
+
+      const info = parseWmoWeather(weatherCode);
+      const result: ActivityWeatherData = {
+        temperature: temp,
+        tempMax,
+        tempMin,
+        weatherCode,
+        label: info.label,
+        emoji: info.emoji,
+        iconName: info.iconName,
+        isRainy: info.isRainy,
+        dateStr: dateKey
+      };
+
+      return result;
+    } catch (err) {
+      console.warn('[Weather API] Utilisation prévision sécurisée:', err);
+      // Fallback réaliste saisonnier garanti
+      const month = targetDate ? new Date(targetDate).getMonth() : new Date().getMonth();
+      const isSummer = month >= 5 && month <= 8;
+      const isWinter = month === 11 || month === 0 || month === 1;
+      const fallbackTemp = isSummer ? 26 : isWinter ? 12 : 19;
+      const fallbackCode = 2; // Éclaircies
+      const info = parseWmoWeather(fallbackCode);
+
+      const fallbackResult: ActivityWeatherData = {
+        temperature: fallbackTemp,
+        tempMax: fallbackTemp + 2,
+        tempMin: Math.max(3, fallbackTemp - 4),
+        weatherCode: fallbackCode,
+        label: info.label,
+        emoji: info.emoji,
+        iconName: info.iconName,
+        isRainy: false,
+        dateStr: dateKey
+      };
+      return fallbackResult;
     }
-
-    const info = parseWmoWeather(weatherCode);
-    const result: ActivityWeatherData = {
-      temperature: temp,
-      tempMax,
-      tempMin,
-      weatherCode,
-      label: info.label,
-      emoji: info.emoji,
-      iconName: info.iconName,
-      isRainy: info.isRainy,
-      dateStr: dateKey
-    };
-
-    weatherCache.set(cacheKey, result);
-    return result;
-  } catch (err) {
-    console.warn('[Weather API] Utilisation prévision sécurisée:', err);
-    // Fallback réaliste saisonnier garanti
-    const month = targetDate ? new Date(targetDate).getMonth() : new Date().getMonth();
-    const isSummer = month >= 5 && month <= 8;
-    const isWinter = month === 11 || month === 0 || month === 1;
-    const fallbackTemp = isSummer ? 26 : isWinter ? 12 : 19;
-    const fallbackCode = 2; // Éclaircies
-    const info = parseWmoWeather(fallbackCode);
-
-    const fallbackResult: ActivityWeatherData = {
-      temperature: fallbackTemp,
-      tempMax: fallbackTemp + 2,
-      tempMin: Math.max(3, fallbackTemp - 4),
-      weatherCode: fallbackCode,
-      label: info.label,
-      emoji: info.emoji,
-      iconName: info.iconName,
-      isRainy: false,
-      dateStr: dateKey
-    };
-
-    weatherCache.set(cacheKey, fallbackResult);
-    return fallbackResult;
-  }
+  });
 }

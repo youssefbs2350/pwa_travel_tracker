@@ -33,6 +33,7 @@ import { api } from '../../services/api';
 import { db } from '../../db/database';
 import { useAppCurrency } from '../../utils/currency';
 import { resolveDestinationIntelligence } from '../../services/aiTripPlanner';
+import { getOrFetchGeocode, getOrFetchPhoto, getOrFetchSuggestions, getStaticCache, setStaticCache } from '../../utils/staticDataCache';
 import L from 'leaflet';
 import confetti from 'canvas-confetti';
 
@@ -75,38 +76,40 @@ export const PlacesView: React.FC = () => {
   const [loadingSuggestions, setLoadingSuggestions] = useState<string[]>([]);
   const cityName = activeTrip?.destination ? activeTrip.destination.split(',')[0].trim() : 'Destination';
 
-  // --- Geocoding de la destination ---
+  // --- Geocoding de la destination avec cache persistant (30 jours) ---
   const geocodeDestination = async (destination: string, country?: string): Promise<[number, number]> => {
-    // Construit une requête propre : prend la 2e partie après la virgule si elle existe
-    // ex: "Djerba la Douce, Tunisie" → essaie d'abord "Djerba, Tunisie", puis "Tunisie"
-    const parts = destination.split(',').map(s => s.trim());
-    const rawCity = parts[0];
-    const rawCountry = parts[1] || country || '';
+    return getOrFetchGeocode(destination, country, async () => {
+      // Construit une requête propre : prend la 2e partie après la virgule si elle existe
+      // ex: "Djerba la Douce, Tunisie" → essaie d'abord "Djerba, Tunisie", puis "Tunisie"
+      const parts = destination.split(',').map(s => s.trim());
+      const rawCity = parts[0];
+      const rawCountry = parts[1] || country || '';
 
-    // Nettoie les adjectifs poétiques : garde le 1er mot significatif de la ville
-    // ex: "Djerba la Douce" → "Djerba" | "Tokyo & Kyoto" → "Tokyo"
-    const cleanCity = rawCity.split(/\s+(?:la|le|les|et|&|the)\s+/i)[0].split('&')[0].trim();
+      // Nettoie les adjectifs poétiques : garde le 1er mot significatif de la ville
+      // ex: "Djerba la Douce" → "Djerba" | "Tokyo & Kyoto" → "Tokyo"
+      const cleanCity = rawCity.split(/\s+(?:la|le|les|et|&|the)\s+/i)[0].split('&')[0].trim();
 
-    const queries = [
-      cleanCity && rawCountry ? `${cleanCity}, ${rawCountry}` : null,
-      rawCountry ? rawCountry : null,
-      destination // dernier recours : requête originale
-    ].filter(Boolean) as string[];
+      const queries = [
+        cleanCity && rawCountry ? `${cleanCity}, ${rawCountry}` : null,
+        rawCountry ? rawCountry : null,
+        destination // dernier recours : requête originale
+      ].filter(Boolean) as string[];
 
-    for (const query of queries) {
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`
-        );
-        const data = await res.json();
-        if (data && data.length > 0) {
-          return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+      for (const query of queries) {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`
+          );
+          const data = await res.json();
+          if (data && data.length > 0) {
+            return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+          }
+        } catch {
+          // tentative suivante
         }
-      } catch {
-        // tentative suivante
       }
-    }
-    return [48.8566, 2.3522]; // Paris comme fallback neutre
+      return [48.8566, 2.3522]; // Paris comme fallback neutre
+    });
   };
 
   const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
@@ -187,68 +190,70 @@ export const PlacesView: React.FC = () => {
     return null;
   };
 
-  // Cherche une vraie photo sur Wikimedia Commons ou Wikipedia par nom de lieu + ville
+  // Cherche une vraie photo sur Wikimedia Commons ou Wikipedia avec cache persistant (14 jours)
   const fetchWikimediaPhoto = async (placeName: string, city: string, category: string): Promise<string> => {
-    // Photos de fallback de haute qualité par catégorie
-    const fallbacks: Record<string, string> = {
-      Restaurant: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
-      Nature: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&auto=format&fit=crop&q=80',
-      Monuments: 'https://images.unsplash.com/photo-1568797629192-789acf8e4df3?w=600&auto=format&fit=crop&q=80',
-      Hébergement: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&auto=format&fit=crop&q=80',
-      Plage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
-      Shopping: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&auto=format&fit=crop&q=80',
-      Autre: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80',
-    };
+    return getOrFetchPhoto(placeName, city, category, async () => {
+      // Photos de fallback de haute qualité par catégorie
+      const fallbacks: Record<string, string> = {
+        Restaurant: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
+        Nature: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&auto=format&fit=crop&q=80',
+        Monuments: 'https://images.unsplash.com/photo-1568797629192-789acf8e4df3?w=600&auto=format&fit=crop&q=80',
+        Hébergement: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&auto=format&fit=crop&q=80',
+        Plage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
+        Shopping: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&auto=format&fit=crop&q=80',
+        Autre: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80',
+      };
 
-    try {
-      const searchTerms = [`${placeName} ${city}`, placeName];
-      for (const term of searchTerms) {
-        const wikiRes = await fetch(
-          `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(term)}&prop=pageimages&format=json&pithumbsize=600&origin=*`
-        );
-        const wikiData = await wikiRes.json();
-        const pages = wikiData?.query?.pages;
-        if (pages) {
-          const page = Object.values(pages)[0] as { thumbnail?: { source: string } };
-          if (page?.thumbnail?.source) {
-            const src = page.thumbnail.source;
-            if (!src.includes('.svg') && !src.includes('Flag') && !src.includes('map') && !src.includes('Map')) {
-              return src;
-            }
-          }
-        }
-      }
-    } catch { /* silencieux */ }
-
-    try {
-      const commonsRes = await fetch(
-        `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(placeName + ' ' + city)}&srnamespace=6&format=json&origin=*&srlimit=3`
-      );
-      const commonsData = await commonsRes.json();
-      const results = commonsData?.query?.search;
-      if (results?.length > 0) {
-        for (const result of results) {
-          const fileName = result.title.replace('File:', '');
-          if (fileName.toLowerCase().includes('map') || fileName.toLowerCase().includes('flag') ||
-              fileName.toLowerCase().includes('logo') || fileName.endsWith('.svg')) continue;
-
-          const imgRes = await fetch(
-            `https://commons.wikimedia.org/w/api.php?action=query&titles=File:${encodeURIComponent(fileName)}&prop=imageinfo&iiprop=url|mime&format=json&origin=*`
+      try {
+        const searchTerms = [`${placeName} ${city}`, placeName];
+        for (const term of searchTerms) {
+          const wikiRes = await fetch(
+            `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(term)}&prop=pageimages&format=json&pithumbsize=600&origin=*`
           );
-          const imgData = await imgRes.json();
-          const imgPages = imgData?.query?.pages;
-          if (imgPages) {
-            const imgPage = Object.values(imgPages)[0] as { imageinfo?: { url: string; mime: string }[] };
-            const info = imgPage?.imageinfo?.[0];
-            if (info?.url && info.mime?.startsWith('image/') && !info.mime.includes('svg')) {
-              return info.url;
+          const wikiData = await wikiRes.json();
+          const pages = wikiData?.query?.pages;
+          if (pages) {
+            const page = Object.values(pages)[0] as { thumbnail?: { source: string } };
+            if (page?.thumbnail?.source) {
+              const src = page.thumbnail.source;
+              if (!src.includes('.svg') && !src.includes('Flag') && !src.includes('map') && !src.includes('Map')) {
+                return src;
+              }
             }
           }
         }
-      }
-    } catch { /* silencieux */ }
+      } catch { /* silencieux */ }
 
-    return fallbacks[category] || fallbacks['Monuments'];
+      try {
+        const commonsRes = await fetch(
+          `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(placeName + ' ' + city)}&srnamespace=6&format=json&origin=*&srlimit=3`
+        );
+        const commonsData = await commonsRes.json();
+        const results = commonsData?.query?.search;
+        if (results?.length > 0) {
+          for (const result of results) {
+            const fileName = result.title.replace('File:', '');
+            if (fileName.toLowerCase().includes('map') || fileName.toLowerCase().includes('flag') ||
+                fileName.toLowerCase().includes('logo') || fileName.endsWith('.svg')) continue;
+
+            const imgRes = await fetch(
+              `https://commons.wikimedia.org/w/api.php?action=query&titles=File:${encodeURIComponent(fileName)}&prop=imageinfo&iiprop=url|mime&format=json&origin=*`
+            );
+            const imgData = await imgRes.json();
+            const imgPages = imgData?.query?.pages;
+            if (imgPages) {
+              const imgPage = Object.values(imgPages)[0] as { imageinfo?: { url: string; mime: string }[] };
+              const info = imgPage?.imageinfo?.[0];
+              if (info?.url && info.mime?.startsWith('image/') && !info.mime.includes('svg')) {
+                return info.url;
+              }
+            }
+          }
+        }
+      } catch { /* silencieux */ }
+
+      return fallbacks[category] || fallbacks['Monuments'];
+    });
   };
 
   // Configuration complète des catégories disponibles pour les suggestions
@@ -299,13 +304,23 @@ export const PlacesView: React.FC = () => {
   // GÉNÉRATION DIRECTE & AUTOMATIQUE : Photos réelles, coordonnées GPS réelles et ZÉRO redondance
   const generateDirectSuggestions = async () => {
     if (!activeTrip) return;
+    const cleanCity = cityName.split(/\s+(?:la|le|les|et|&|the)\s+/i)[0].split('&')[0].trim();
+    const cacheKey = `sug_direct_${cleanCity.toLowerCase()}_${places.length}`;
+    
+    // Vérification immédiate du cache persistant (0 ms)
+    const cached = getStaticCache<typeof realSuggestions>(cacheKey);
+    if (cached && cached.length > 0) {
+      setRealSuggestions(cached);
+      setLoadingRealSuggestions(false);
+      return;
+    }
+
     setLoadingRealSuggestions(true);
 
     try {
       // 1. Résolution de l'intelligence de destination
       const intel = await resolveDestinationIntelligence(activeTrip.destination);
       const [centerLat, centerLon] = destinationCoords ?? [intel.lat || 48.8566, intel.lon || 2.3522];
-      const cleanCity = cityName.split(/\s+(?:la|le|les|et|&|the)\s+/i)[0].split('&')[0].trim();
       const country = activeTrip.country || intel.country || '';
 
       // Noms déjà présents dans le voyage pour éliminer strictement toute redondance
@@ -405,6 +420,9 @@ export const PlacesView: React.FC = () => {
       }
 
       setRealSuggestions(candidateList);
+      if (candidateList.length > 0) {
+        setStaticCache(cacheKey, candidateList, 24 * 60 * 60 * 1000); // 24 heures
+      }
     } catch (err) {
       console.warn('[PlacesView] Erreur génération directe:', err);
     } finally {
