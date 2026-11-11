@@ -1,6 +1,28 @@
 import { db, SyncItem } from '../db/database';
 import { Trip, Place, Activity, Expense, Memory, Review, Complaint, Recommendation } from '../types';
 
+// ============================================================
+// Cache mémoire in-process (TTL) — évite les doubles appels API
+// lors des re-rendus React et des navigations rapides
+// ============================================================
+interface CacheEntry<T> { data: T; expiresAt: number }
+const _memCache = new Map<string, CacheEntry<any>>();
+
+function memGet<T>(key: string): T | null {
+  const entry = _memCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { _memCache.delete(key); return null; }
+  return entry.data as T;
+}
+function memSet<T>(key: string, data: T, ttlMs: number): void {
+  _memCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+}
+export function memInvalidate(prefix: string): void {
+  for (const key of _memCache.keys()) {
+    if (key.startsWith(prefix)) _memCache.delete(key);
+  }
+}
+
 export const isServerOnline = async (): Promise<boolean> => {
   if (!navigator.onLine) return false;
   try {
@@ -15,18 +37,25 @@ export const api = {
   // TRIPS (Ameni)
   trips: {
     async getAll(): Promise<Trip[]> {
+      const CACHE_KEY = 'trips:all';
+      const cached = memGet<Trip[]>(CACHE_KEY);
+      if (cached) return cached;
+
       try {
         const res = await fetch('/api/trips');
         if (res.ok) {
           const list = await res.json();
           const formatted = list.map((t: any) => ({ ...t, id: t._id || t.id }));
           await db.trips.bulkPut(formatted);
+          memSet(CACHE_KEY, formatted, 5 * 60 * 1000); // 5 min
           return formatted;
         }
       } catch (err) {
         console.log('[API] Récupération depuis IndexedDB (Hors-ligne)');
       }
-      return db.trips.toArray();
+      const local = await db.trips.toArray();
+      memSet(CACHE_KEY, local, 60 * 1000);
+      return local;
     },
 
     async create(tripData: Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>): Promise<Trip> {
@@ -66,6 +95,7 @@ export const api = {
 
     async update(id: string, updates: Partial<Trip>): Promise<void> {
       await db.trips.update(id, updates);
+      memInvalidate('trips:');
       try {
         await fetch(`/api/trips/${id}`, {
           method: 'PUT',
@@ -84,6 +114,7 @@ export const api = {
 
     async delete(id: string): Promise<void> {
       await db.trips.delete(id);
+      memInvalidate('trips:');
       try {
         await fetch(`/api/trips/${id}`, { method: 'DELETE' });
       } catch {
@@ -246,6 +277,10 @@ export const api = {
   // PLACES (Hedi)
   places: {
     async getByTrip(tripId: string): Promise<Place[]> {
+      const CACHE_KEY = `places:${tripId}`;
+      const cached = memGet<Place[]>(CACHE_KEY);
+      if (cached) return cached;
+
       const localPlaces = await db.places.where('tripId').equals(tripId).toArray();
       try {
         const res = await fetch(`/api/places?tripId=${tripId}`);
@@ -254,6 +289,7 @@ export const api = {
           if (list.length > 0) {
             const formatted = list.map((p: any) => ({ ...p, id: p.id || p._id }));
             await db.places.bulkPut(formatted);
+            memSet(CACHE_KEY, formatted, 10 * 60 * 1000); // 10 min
             return formatted;
           } else if (localPlaces.length > 0) {
             // Synchroniser les lieux locaux générés par l'IA vers MongoDB
@@ -262,6 +298,7 @@ export const api = {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(localPlaces)
             }).catch(() => {});
+            memSet(CACHE_KEY, localPlaces, 2 * 60 * 1000);
             return localPlaces;
           }
           return [];
@@ -269,6 +306,7 @@ export const api = {
       } catch {
         console.log('[API] Lieux récupérés depuis IndexedDB');
       }
+      memSet(CACHE_KEY, localPlaces, 60 * 1000);
       return localPlaces;
     },
 
@@ -290,6 +328,7 @@ export const api = {
           const created = await res.json();
           const finalPlace = { ...created, id: created._id || created.id };
           await db.places.put(finalPlace);
+          memInvalidate('places:');
           return finalPlace;
         }
       } catch {
@@ -297,6 +336,7 @@ export const api = {
       }
 
       await db.places.put(localPlace);
+      memInvalidate('places:');
       await db.syncQueue.add({
         type: 'CREATE',
         collection: 'places',
@@ -342,6 +382,10 @@ export const api = {
   // ACTIVITIES (Youssef)
   activities: {
     async getByTrip(tripId: string): Promise<Activity[]> {
+      const CACHE_KEY = `activities:${tripId}`;
+      const cached = memGet<Activity[]>(CACHE_KEY);
+      if (cached) return cached;
+
       const localActs = await db.activities.where('tripId').equals(tripId).toArray();
       try {
         const res = await fetch(`/api/activities?tripId=${tripId}`);
@@ -350,7 +394,9 @@ export const api = {
           if (list.length > 0) {
             const formatted = list.map((a: any) => ({ ...a, id: a.id || a._id }));
             await db.activities.bulkPut(formatted);
-            return formatted;
+            const sorted = formatted.sort((a: Activity, b: Activity) => a.dayNumber - b.dayNumber || a.startTime.localeCompare(b.startTime));
+            memSet(CACHE_KEY, sorted, 10 * 60 * 1000); // 10 min
+            return sorted;
           } else if (localActs.length > 0) {
             // Synchroniser le planning IA local vers MongoDB
             fetch('/api/activities', {
@@ -358,14 +404,18 @@ export const api = {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(localActs)
             }).catch(() => {});
-            return localActs.sort((a, b) => a.dayNumber - b.dayNumber || a.startTime.localeCompare(b.startTime));
+            const sorted = localActs.sort((a, b) => a.dayNumber - b.dayNumber || a.startTime.localeCompare(b.startTime));
+            memSet(CACHE_KEY, sorted, 2 * 60 * 1000);
+            return sorted;
           }
           return [];
         }
       } catch {
         console.log('[API] Activités lues depuis IndexedDB');
       }
-      return localActs.sort((a, b) => a.dayNumber - b.dayNumber || a.startTime.localeCompare(b.startTime));
+      const sorted = localActs.sort((a, b) => a.dayNumber - b.dayNumber || a.startTime.localeCompare(b.startTime));
+      memSet(CACHE_KEY, sorted, 60 * 1000);
+      return sorted;
     },
 
     async create(activity: Omit<Activity, 'id' | 'createdAt'>): Promise<Activity> {

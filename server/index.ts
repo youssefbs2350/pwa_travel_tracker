@@ -26,6 +26,31 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// ── Cache-Control middleware ──────────────────────────────────────────────
+// GET de données stables → stale-while-revalidate pour Vercel Edge
+// Mutations et données sensibles → no-store
+app.use((req, res, next) => {
+  if (req.method === 'GET') {
+    if (/^\/(api\/)?(places|activities|expenses|memories)/.test(req.path)) {
+      // Données stables : CDN peut servir depuis cache 5 min, revalider en arrière-plan
+      res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    } else if (/^\/(api\/)?(trips)/.test(req.path)) {
+      // Voyages : cache court 2 min
+      res.setHeader('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300');
+    } else if (/^\/(api\/)?(health|cron)/.test(req.path)) {
+      res.setHeader('Cache-Control', 'public, s-maxage=30');
+    } else {
+      // users, auth et tout le reste → jamais cachées
+      res.setHeader('Cache-Control', 'private, no-cache, no-store');
+    }
+  } else {
+    // POST / PUT / DELETE → jamais cachées
+    res.setHeader('Cache-Control', 'no-cache, no-store');
+  }
+  next();
+});
+// ─────────────────────────────────────────────────────────────────────────
+
 // 1. Middleware pour connecter MongoDB AVANT toute route (essentiel pour Serverless Vercel)
 app.use(async (req, res, next) => {
   try {

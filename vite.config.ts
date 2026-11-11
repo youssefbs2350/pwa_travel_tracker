@@ -15,6 +15,21 @@ export default defineConfig({
       }
     }
   },
+  build: {
+    // Chunk splitting pour un meilleur cache long-terme
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-leaflet': ['leaflet'],
+          'vendor-dexie': ['dexie'],
+          'vendor-lucide': ['lucide-react'],
+        }
+      }
+    },
+    // Compresse les assets et met en cache-busting via hash dans le nom
+    chunkSizeWarningLimit: 1000,
+  },
   plugins: [
     react(),
     VitePWA({
@@ -70,49 +85,102 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Pre-cache tous les assets statiques lors de l'installation SW
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webp}'],
         runtimeCaching: [
+          // ── API auth/users → jamais cachées (données sensibles) ──
           {
-            urlPattern: /^\/api\/.*/i,
+            urlPattern: /^\/api\/(users|auth|complaints)/i,
+            handler: 'NetworkOnly',
+          },
+          // ── Messages temps réel → NetworkFirst très court (2 s) ──
+          {
+            urlPattern: /^\/api\/trips\/.*\/messages/i,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 3,
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24 * 7 // 7 Days
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
+              cacheName: 'api-messages-cache',
+              networkTimeoutSeconds: 2,
+              expiration: { maxEntries: 30, maxAgeSeconds: 120 },
+              cacheableResponse: { statuses: [0, 200] }
             }
           },
+          // ── Lieux, activités, dépenses (données stables) → StaleWhileRevalidate 10 min ──
           {
-            urlPattern: /^https:\/\/.*tile\.openstreetmap\.org\/.*/i,
+            urlPattern: /^\/api\/(places|activities|expenses|memories)\b/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'api-data-cache',
+              expiration: { maxEntries: 200, maxAgeSeconds: 600 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          // ── Voyages → StaleWhileRevalidate 5 min ──
+          {
+            urlPattern: /^\/api\/trips\b/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'api-trips-cache',
+              expiration: { maxEntries: 50, maxAgeSeconds: 300 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          // ── Tuiles OSM carte → CacheFirst 60 jours ──
+          {
+            urlPattern: /^https:\/\/[a-z]\.tile\.openstreetmap\.org\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'osm-tiles-cache',
-              expiration: {
-                maxEntries: 400,
-                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 Days
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
+              expiration: { maxEntries: 1000, maxAgeSeconds: 5184000 },
+              cacheableResponse: { statuses: [0, 200] }
             }
           },
+          // ── Nominatim géocoding → StaleWhileRevalidate 7 jours ──
+          {
+            urlPattern: /^https:\/\/nominatim\.openstreetmap\.org\/.*/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'nominatim-cache',
+              expiration: { maxEntries: 300, maxAgeSeconds: 604800 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          // ── Wikipedia/Wikimedia photos → CacheFirst 14 jours ──
+          {
+            urlPattern: /^https:\/\/(fr|en)\.wikipedia\.org\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'wikipedia-cache',
+              expiration: { maxEntries: 300, maxAgeSeconds: 1209600 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/commons\.wikimedia\.org\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'wikimedia-images-cache',
+              expiration: { maxEntries: 200, maxAgeSeconds: 2592000 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          // ── Images Unsplash → CacheFirst 30 jours ──
           {
             urlPattern: /^https:\/\/images\.unsplash\.com\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'unsplash-images-cache',
-              expiration: {
-                maxEntries: 150,
-                maxAgeSeconds: 60 * 60 * 24 * 14 // 14 Days
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
+              expiration: { maxEntries: 150, maxAgeSeconds: 2592000 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          // ── Google Fonts → CacheFirst 1 an ──
+          {
+            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: { maxEntries: 30, maxAgeSeconds: 31536000 },
+              cacheableResponse: { statuses: [0, 200] }
             }
           }
         ]

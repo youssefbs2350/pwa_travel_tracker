@@ -28541,11 +28541,19 @@ async function connectMongoDB() {
     if (!cachedPromise) {
       mongoose.set("strictQuery", false);
       cachedPromise = mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 5e3
+        serverSelectionTimeoutMS: 5e3,
+        // Pool de connexions optimisé pour Vercel Serverless
+        // (max 5 connexions par instance pour ne pas épuiser Atlas Free Tier)
+        maxPoolSize: 5,
+        minPoolSize: 1,
+        // Reconnexion automatique rapide
+        heartbeatFrequencyMS: 1e4,
+        socketTimeoutMS: 3e4,
+        connectTimeoutMS: 1e4
       });
     }
     await cachedPromise;
-    console.log("[MongoDB] Connect\xE9 avec succ\xE8s");
+    console.log("[MongoDB] Connect\xE9 avec succ\xE8s (pool actif)");
     return true;
   } catch (error2) {
     cachedPromise = null;
@@ -43855,6 +43863,22 @@ var PORT = process.env.PORT || 5e3;
 app.use((0, import_cors.default)());
 app.use(import_express10.default.json({ limit: "50mb" }));
 app.use(import_express10.default.urlencoded({ limit: "50mb", extended: true }));
+app.use((req, res, next) => {
+  if (req.method === "GET") {
+    if (/^\/(api\/)?(places|activities|expenses|memories)/.test(req.path)) {
+      res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
+    } else if (/^\/(api\/)?(trips)/.test(req.path)) {
+      res.setHeader("Cache-Control", "public, s-maxage=120, stale-while-revalidate=300");
+    } else if (/^\/(api\/)?(health|cron)/.test(req.path)) {
+      res.setHeader("Cache-Control", "public, s-maxage=30");
+    } else {
+      res.setHeader("Cache-Control", "private, no-cache, no-store");
+    }
+  } else {
+    res.setHeader("Cache-Control", "no-cache, no-store");
+  }
+  next();
+});
 app.use(async (req, res, next) => {
   try {
     await connectMongoDB();
